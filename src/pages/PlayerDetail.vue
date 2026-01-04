@@ -220,17 +220,50 @@ function goBack () {
   else router.push('/')
 }
 
-/* tribe mapping */
+/* 
+ * Tribe mapping with case-insensitive matching
+ * To debug, add this to browser console:
+ *   window.debugTribe = function(t) {
+ *     const s = String(t).trim().toLowerCase();
+ *     return {
+ *       input: t,
+ *       type: typeof t,
+ *       normalized: s,
+ *       mapped: TRIBE_MAP[s] || 'No direct match',
+ *       allTribes: TRIBE_MAP
+ *     };
+ *   }
+ */
 const TRIBE_MAP = {
-  1:'Romans', 2:'Teutons', 3:'Gauls', 4:'Nature',
-  5:'Natars', 6:'Egyptians', 7:'Huns', 8:'Spartans', 9:'Vikings'
+  // Number to name mapping
+  1: 'Romans', 2: 'Teutons', 3: 'Gauls', 4: 'Nature',
+  5: 'Natars', 6: 'Egyptians', 7: 'Huns', 8: 'Spartans', 9: 'Vikings',
+  // Case-insensitive string matching
+  'romans': 'Romans', 'teutons': 'Teutons', 'gauls': 'Gauls', 'nature': 'Nature',
+  'natars': 'Natars', 'egyptians': 'Egyptians', 'huns': 'Huns', 
+  'spartans': 'Spartans', 'vikings': 'Vikings'
 }
+
 function mapTribe(t) {
-  if (t == null) return 'Unknown'
+  if (t == null || t === '') return 'Unknown'
+  
+  // Try to match by number
   const n = Number(t)
-  if (Number.isFinite(n) && TRIBE_MAP[n]) return TRIBE_MAP[n]
-  const s = String(t).trim()
-  return TRIBE_MAP[s] || s || 'Unknown'
+  if (!isNaN(n) && TRIBE_MAP[n]) return TRIBE_MAP[n]
+  
+  // Try to match by string (case-insensitive)
+  const s = String(t).trim().toLowerCase()
+  if (s in TRIBE_MAP) return TRIBE_MAP[s]
+  
+  // Try direct match with any case
+  const directMatch = Object.entries(TRIBE_MAP).find(([_, value]) => 
+    String(value).toLowerCase() === s
+  )
+  
+  if (directMatch) return directMatch[1]
+  
+  // Fallback: capitalize first letter
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Unknown'
 }
 
 /* table data */
@@ -495,6 +528,12 @@ function resetState() {
 const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
 async function loadAll() {
+  // Validate player name before making any API calls
+  if (!playerName.value) {
+    error.value = 'No player name provided.'
+    return
+  }
+
   try {
     let playerTribe = null
     
@@ -502,9 +541,13 @@ async function loadAll() {
     try {
       const playersResponse = await api.get('/api/players')
       const player = playersResponse.data?.find(p => p.name === playerName.value)
+      
       if (player) {
-        playerTribe = player.tribe
-        console.log('Found player tribe from players list:', playerTribe)
+        // Debug: To see player data in console
+        window.debugPlayer = player
+        
+        // Try different possible tribe field names
+        playerTribe = player.tribe_id || player.tribeId || player.tribe || null
       } else {
         console.log('Player not found in players list')
       }
@@ -513,23 +556,35 @@ async function loadAll() {
     }
     
     // Then get the villages
+    if (!playerName.value) {
+      throw new Error('Player name is required')
+    }
+    
     const { data } = await api.get(`/api/player/${encodeURIComponent(playerName.value)}/villages`)
-    const villagesData = data.villages || []
+    const villagesData = data?.villages || []
+    
+    // Debug: To see village data in console, use:
+    // window.debugVillage = () => villagesData[0]
     
     // Process villages data
-    villages.value = villagesData.map(r => ({
-      village:       r.village_name,
-      coords:        `(${r.x},${r.y})`,
-      x:             r.x,
-      y:             r.y,
-      population:    Number(r.population || 0),
-      victoryPoints: Number(r.victory_points || 0),
-      alliance:      r.alliance_tag || '',
-      region:        r.region || '',
-      tribe:         playerTribe ? mapTribe(playerTribe) : mapTribe(r.tribe),
-      player:        r.player_name || '',
-      player_id:     r.player_id || r.playerId || null
-    }))
+    villages.value = villagesData.map(r => {
+      // Try to get tribe from different possible fields
+      const villageTribe = r.tribe_id || r.tribeId || r.tribe || 'Unknown'
+      
+      return {
+        village:       r.village_name,
+        coords:        `(${r.x},${r.y})`,
+        x:             r.x,
+        y:             r.y,
+        population:    Number(r.population || 0),
+        victoryPoints: Number(r.victory_points || 0),
+        alliance:      r.alliance_tag || '',
+        region:        r.region || '',
+        tribe:         mapTribe(villageTribe),
+        player:        r.player_name || '',
+        player_id:     r.player_id || r.playerId || null
+      }
+    })
     
     playerId.value = villages.value[0]?.player_id || null
 
