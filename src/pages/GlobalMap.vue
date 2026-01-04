@@ -3,7 +3,22 @@
     <!-- HEADER -->
     <q-header elevated>
       <q-toolbar>
-        <q-btn dense flat round icon="menu" disabled />
+        <q-btn
+          dense
+          flat
+          round
+          icon="menu"
+          @click="mobileSidebarOpen = !mobileSidebarOpen"
+          class="lt-md"
+        />
+        <q-btn
+          dense
+          flat
+          round
+          icon="tune"
+          @click="sidebarOpen = !sidebarOpen"
+          class="gt-sm"
+        />
         <q-toolbar-title>Interactive Global Map</q-toolbar-title>
         <q-space />
         <q-btn dense flat icon="refresh" @click="reloadMarkers(true)" :loading="loading" :disable="loading">
@@ -19,9 +34,16 @@
     <q-page-container class="q-pa-none">
       <q-page class="full-page q-pa-none row no-wrap">
 
-        <!-- LEFT SIDEBAR -->
-        <div class="menu-column">
-          <q-list padding>
+        <!-- LEFT SIDEBAR - Desktop Drawer -->
+        <q-drawer
+          v-model="sidebarOpen"
+          show-if-above
+          :width="320"
+          :breakpoint="1024"
+          bordered
+          class="menu-column-drawer bg-dark"
+        >
+          <q-list padding class="sidebar-content">
             <!-- GENERAL CONTROLS -->
             <div class="menu-section">
               <div class="section-header">
@@ -29,26 +51,26 @@
                 General Controls
               </div>
               <div class="section-scroll q-gutter-sm q-pa-sm">
-                <q-toggle v-model="showBackground" label="Background Image" dense />
-                <q-slider v-model="bgOpacity" :min="0" :max="1" :step="0.05" label label-always>
+                <q-toggle v-model="showBackground" label="Background Image" dense dark />
+                <q-slider v-model="bgOpacity" :min="0" :max="1" :step="0.05" label label-always dark>
                   <template #label>BG Opacity: {{ bgOpacity.toFixed(2) }}</template>
                 </q-slider>
 
-                <q-toggle v-model="showGrid" label="Grid" dense />
-                <q-slider v-model="gridOpacity" :min="0" :max="1" :step="0.05" label label-always>
+                <q-toggle v-model="showGrid" label="Grid" dense dark />
+                <q-slider v-model="gridOpacity" :min="0" :max="1" :step="0.05" label label-always dark>
                   <template #label>Grid Opacity: {{ gridOpacity.toFixed(2) }}</template>
                 </q-slider>
-                <q-slider v-model="gridSize" :min="0.5" :max="10" :step="0.5" label label-always>
+                <q-slider v-model="gridSize" :min="0.5" :max="10" :step="0.5" label label-always dark>
                   <template #label>Grid Size: {{ gridSize }}u</template>
                 </q-slider>
 
-                <q-separator spaced />
+                <q-separator spaced dark />
                 <div class="row q-col-gutter-sm">
                   <div class="col">
-                    <q-input v-model.number="gotoX" type="number" label="Goto X" dense outlined />
+                    <q-input v-model.number="gotoX" type="number" label="Goto X" dense outlined dark />
                   </div>
                   <div class="col">
-                    <q-input v-model.number="gotoY" type="number" label="Goto Y" dense outlined />
+                    <q-input v-model.number="gotoY" type="number" label="Goto Y" dense outlined dark />
                   </div>
                 </div>
                 <q-btn class="full-width q-mt-sm" color="primary" icon="my_location" label="Center on coords" @click="centerOnCoords" />
@@ -59,8 +81,8 @@
               </div>
             </div>
 
-            <!-- GROUP FILTERS -->
-            <div class="menu-section" v-for="grp in ['alliances','regions','tribes']" :key="grp">
+            <!-- GROUP FILTERS - Excluding regions -->
+            <div class="menu-section" v-for="grp in ['alliances','tribes']" :key="grp">
               <div class="section-header">
                 <q-icon name="filter_list" class="q-mr-sm" />
                 {{ capitalize(grp) }}
@@ -72,6 +94,7 @@
                   v-model="groupFilters[grp]"
                   :label="`Filter ${capitalize(grp)}...`"
                   @update:model-value="filterGroup(grp)"
+                  dark
                 >
                   <template #append><q-icon name="search" /></template>
                 </q-input>
@@ -101,16 +124,17 @@
                   :options="drawOptions"
                   label="Mode"
                   emit-value map-options
+                  dark
                 />
                 <div class="row q-col-gutter-sm">
                   <div class="col-6">
-                    <q-input v-model="drawColor" label="Color" type="color" dense outlined />
+                    <q-input v-model="drawColor" label="Color" type="color" dense outlined dark />
                   </div>
                   <div class="col-6">
-                    <q-slider v-model="drawWidth" :min="1" :max="10" :step="1" label label-always />
+                    <q-slider v-model="drawWidth" :min="1" :max="10" :step="1" label label-always dark />
                   </div>
                 </div>
-                <q-toggle v-model="snapToGrid" label="Snap to grid" dense />
+                <q-toggle v-model="snapToGrid" label="Snap to grid" dense dark />
                 <div class="row q-col-gutter-sm">
                   <div class="col-6"><q-btn class="full-width" color="info" label="Undo"  :disable="!canUndo"  @click="undo" /></div>
                   <div class="col-6"><q-btn class="full-width" color="info" label="Redo"  :disable="!canRedo"  @click="redo" /></div>
@@ -133,7 +157,7 @@
             </div>
 
           </q-list>
-        </div>
+        </q-drawer>
 
         <!-- MAP COLUMN -->
         <div class="map-column">
@@ -239,7 +263,14 @@
           </div>
 
           <!-- FAB controls -->
-          <q-fab vertical-actions-align="right" color="primary" icon="map" direction="up" class="fab">
+          <q-fab
+            vertical-actions-align="right"
+            color="primary"
+            icon="map"
+            direction="up"
+            class="fab"
+            :class="{ 'fab-mobile': $q.screen.lt.md }"
+          >
             <q-fab-action color="primary" icon="add" @click="zoomBy(1.25)"   label="Zoom In" />
             <q-fab-action color="primary" icon="remove" @click="zoomBy(0.8)" label="Zoom Out" />
             <q-fab-action color="secondary" icon="center_focus_strong" @click="resetView" label="Reset View" />
@@ -250,6 +281,137 @@
 
       </q-page>
     </q-page-container>
+
+    <!-- Mobile Bottom Sheet -->
+    <q-dialog
+      v-model="mobileSidebarOpen"
+      position="bottom"
+      class="lt-md"
+    >
+      <q-card style="min-height: 70vh; max-height: 90vh;" class="bg-dark text-white">
+        <q-card-section class="row items-center q-pb-none">
+          <div class="text-h6">Map Controls</div>
+          <q-space />
+          <q-btn icon="close" flat round dense v-close-popup />
+        </q-card-section>
+        <q-card-section class="q-pt-none sidebar-content" style="max-height: calc(70vh - 60px); overflow-y: auto;">
+          <q-list padding>
+            <!-- GENERAL CONTROLS -->
+            <div class="menu-section">
+              <div class="section-header">
+                <q-icon name="settings" class="q-mr-sm" />
+                General Controls
+              </div>
+              <div class="section-scroll q-gutter-sm q-pa-sm">
+                <q-toggle v-model="showBackground" label="Background Image" dense dark />
+                <q-slider v-model="bgOpacity" :min="0" :max="1" :step="0.05" label label-always dark>
+                  <template #label>BG Opacity: {{ bgOpacity.toFixed(2) }}</template>
+                </q-slider>
+
+                <q-toggle v-model="showGrid" label="Grid" dense dark />
+                <q-slider v-model="gridOpacity" :min="0" :max="1" :step="0.05" label label-always dark>
+                  <template #label>Grid Opacity: {{ gridOpacity.toFixed(2) }}</template>
+                </q-slider>
+                <q-slider v-model="gridSize" :min="0.5" :max="10" :step="0.5" label label-always dark>
+                  <template #label>Grid Size: {{ gridSize }}u</template>
+                </q-slider>
+
+                <q-separator spaced dark />
+                <div class="row q-col-gutter-sm">
+                  <div class="col">
+                    <q-input v-model.number="gotoX" type="number" label="Goto X" dense outlined dark />
+                  </div>
+                  <div class="col">
+                    <q-input v-model.number="gotoY" type="number" label="Goto Y" dense outlined dark />
+                  </div>
+                </div>
+                <q-btn class="full-width q-mt-sm" color="primary" icon="my_location" label="Center on coords" @click="centerOnCoords" />
+              </div>
+
+              <div class="section-actions">
+                <q-btn class="full-width" color="primary" label="Toggle All Markers" @click="toggleAllMarkers" />
+              </div>
+            </div>
+
+            <!-- GROUP FILTERS - Excluding regions -->
+            <div class="menu-section" v-for="grp in ['alliances','tribes']" :key="grp">
+              <div class="section-header">
+                <q-icon name="filter_list" class="q-mr-sm" />
+                {{ capitalize(grp) }}
+              </div>
+
+              <div class="q-pa-sm">
+                <q-input
+                  dense outlined clearable
+                  v-model="groupFilters[grp]"
+                  :label="`Filter ${capitalize(grp)}...`"
+                  @update:model-value="filterGroup(grp)"
+                  dark
+                >
+                  <template #append><q-icon name="search" /></template>
+                </q-input>
+                <div class="row q-col-gutter-sm q-mt-sm">
+                  <div class="col-4"><q-btn size="sm" color="primary" outline label="All"   @click="selectGroup(grp,'all')" /></div>
+                  <div class="col-4"><q-btn size="sm" color="primary" outline label="None"  @click="selectGroup(grp,'none')" /></div>
+                  <div class="col-4"><q-btn size="sm" color="primary" outline label="Invert" @click="selectGroup(grp,'invert')" /></div>
+                </div>
+              </div>
+
+              <div class="section-scroll">
+                <div :ref="el => (groupRefs[grp] = el)" v-html="toggles[grp]" class="q-pa-sm" />
+              </div>
+            </div>
+
+            <!-- DRAWING & MEASURE -->
+            <div class="menu-section">
+              <div class="section-header">
+                <q-icon name="brush" class="q-mr-sm" />
+                Drawing / Measure
+              </div>
+
+              <div class="section-scroll q-pa-sm q-gutter-sm">
+                <q-select
+                  dense outlined
+                  v-model="drawMode"
+                  :options="drawOptions"
+                  label="Mode"
+                  emit-value map-options
+                  dark
+                />
+                <div class="row q-col-gutter-sm">
+                  <div class="col-6">
+                    <q-input v-model="drawColor" label="Color" type="color" dense outlined dark />
+                  </div>
+                  <div class="col-6">
+                    <q-slider v-model="drawWidth" :min="1" :max="10" :step="1" label label-always dark />
+                  </div>
+                </div>
+                <q-toggle v-model="snapToGrid" label="Snap to grid" dense dark />
+                <div class="row q-col-gutter-sm">
+                  <div class="col-6"><q-btn class="full-width" color="info" label="Undo"  :disable="!canUndo"  @click="undo" /></div>
+                  <div class="col-6"><q-btn class="full-width" color="info" label="Redo"  :disable="!canRedo"  @click="redo" /></div>
+                </div>
+                <div class="row q-col-gutter-sm q-mt-sm">
+                  <div class="col-6"><q-btn class="full-width" color="negative" label="Clear" @click="clearDrawings" /></div>
+                  <div class="col-6">
+                    <q-btn-dropdown class="full-width" color="secondary" label="Save / Load">
+                      <q-list>
+                        <q-item clickable v-close-popup @click="exportDrawings"><q-item-section>Export JSON</q-item-section></q-item>
+                        <q-item clickable v-close-popup @click="importDrawings"><q-item-section>Import JSON</q-item-section></q-item>
+                        <q-separator />
+                        <q-item clickable v-close-popup @click="saveToLocal"><q-item-section>Save to LocalStorage</q-item-section></q-item>
+                        <q-item clickable v-close-popup @click="loadFromLocal"><q-item-section>Load from LocalStorage</q-item-section></q-item>
+                      </q-list>
+                    </q-btn-dropdown>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </q-list>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
 
     <!-- PLAYER PROFILE DIALOG -->
     <q-dialog v-model="profileDialog">
@@ -287,6 +449,27 @@ import * as d3 from 'd3'
 /* === State === */
 const $q = useQuasar()
 const loading = ref(false)
+const sidebarOpen = ref($q.screen.gt.sm) // Open on desktop, closed on mobile by default
+const mobileSidebarOpen = ref(false)
+
+// Watch sidebarOpen to sync with mobile dialog
+watch(() => $q.screen.lt.md, (isMobile) => {
+  if (isMobile) {
+    mobileSidebarOpen.value = sidebarOpen.value
+  }
+})
+
+watch(sidebarOpen, (val) => {
+  if ($q.screen.lt.md) {
+    mobileSidebarOpen.value = val
+  }
+})
+
+watch(mobileSidebarOpen, (val) => {
+  if ($q.screen.lt.md) {
+    sidebarOpen.value = val
+  }
+})
 
 /** Map & zoom */
 const svg = ref(null)
@@ -307,9 +490,9 @@ const gridSize = ref(2)
 
 /** Markers & filters */
 const markers = ref('')
-const toggles = ref({ alliances: '', regions: '', tribes: '' })
-const groupRefs = { alliances: null, regions: null, tribes: null }
-const groupFilters = ref({ alliances: '', regions: '', tribes: '' })
+const toggles = ref({ alliances: '', tribes: '' })
+const groupRefs = { alliances: null, tribes: null }
+const groupFilters = ref({ alliances: '', tribes: '' })
 let masterVisible = true
 
 /** Background image metrics + computed rect (in map coords) */
@@ -771,7 +954,6 @@ async function reloadMarkers (force = false) {
     markers.value = payload?.markers || ''
     toggles.value = {
       alliances: payload?.alliance_checkboxes || '',
-      regions:   payload?.region_checkboxes   || '',
       tribes:    payload?.tribe_checkboxes    || ''
     }
     
@@ -782,7 +964,7 @@ async function reloadMarkers (force = false) {
     await nextTick()
 
     // Delegated events for group checkbox changes
-    ;['alliances','regions','tribes'].forEach(grp => {
+    ;['alliances','tribes'].forEach(grp => {
       const root = groupRefs[grp]
       if (!root) return
       root.addEventListener('change', (e) => {
@@ -801,7 +983,7 @@ async function reloadMarkers (force = false) {
   } catch (error) {
     console.error('Error loading markers:', error)
     markers.value = ''
-    toggles.value = { alliances: '', regions: '', tribes: '' }
+    toggles.value = { alliances: '', tribes: '' }
   } finally {
     loading.value = false
   }
@@ -950,10 +1132,18 @@ html, body, #q-app { height: 100%; margin: 0; }
 
 /* Sidebar */
 .menu-column { width: 320px; overflow-y: auto; border-right: 1px solid var(--q-primary-1, #2a2a2a); background: #0d0d0d; color: #eaeaea; }
+.menu-column-drawer { background: #0d0d0d; color: #eaeaea; }
+.sidebar-content { background: #0d0d0d; color: #eaeaea; }
 .menu-section { margin-bottom: 1rem; border-bottom: 1px solid #1f1f1f; }
 .section-header { padding: 0.5rem 1rem; display: flex; align-items: center; font-weight: 600; }
 .section-scroll { max-height: 180px; overflow-y: auto; padding: 0 0.5rem 0.5rem 0.5rem; }
 .section-actions { padding: 0.5rem 1rem 1rem 1rem; }
+
+@media (max-width: 1023px) {
+  .menu-column {
+    display: none;
+  }
+}
 
 /* Map column is black to match background */
 .map-column { flex: 1; position: relative; overflow: hidden; background: #000; }
@@ -979,6 +1169,7 @@ html, body, #q-app { height: 100%; margin: 0; }
 
 /* FAB */
 .fab { position: absolute; right: 16px; bottom: 16px; z-index: 5; }
+.fab-mobile { bottom: 80px; }
 
 /* Measure label */
 .measure-label { paint-order: stroke; stroke: #000; stroke-width: 0.6; fill: #fff; }

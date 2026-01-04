@@ -12,6 +12,7 @@
 // to match your app's branding.
 // Tip: Use the "Theme Builder" on Quasar's documentation website.
 
+// Modern Color Palette
 $primary: #f6b512;
 $secondary: #36464e;
 $accent: #26a69a;
@@ -23,3 +24,29 @@ $positive: #21ba45;
 $negative: #c10015;
 $info: #9c27b0;
 $warning: #cdcdcd;
+
+// Typography Scale
+$typography-font-family: 'Roboto', '-apple-system', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+
+// Border Radius
+$generic-border-radius: 8px;
+$button-border-radius: 8px;
+$input-border-radius: 8px;
+
+// Shadows (Elevation System)
+$shadow-1: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+$shadow-2: 0 3px 6px rgba(0, 0, 0, 0.16), 0 3px 6px rgba(0, 0, 0, 0.23);
+$shadow-3: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.23);
+$shadow-4: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
+$shadow-5: 0 19px 38px rgba(0, 0, 0, 0.30), 0 15px 12px rgba(0, 0, 0, 0.22);
+
+// Transitions
+$transition-duration: 0.2s;
+$transition-timing: ease-in-out;
+
+// Breakpoints (Quasar default, documented for reference)
+// xs: 0-599px
+// sm: 600-1023px
+// md: 1024-1439px
+// lg: 1440-1919px
+// xl: 1920px+

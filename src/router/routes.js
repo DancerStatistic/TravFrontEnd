@@ -15,22 +15,23 @@ const routes = [
       path: '/',
       component: () => import('layouts/MainLayout.vue'),
       children: [
-        { path: '',                 name: 'global-map',      component: () => import('pages/GlobalMap.vue') },
-  
+        { path: '',                 name: 'landing',         component: () => import('pages/LandingPage.vue') },
+        { path: 'map',             name: 'global-map',      component: () => import('pages/GlobalMap.vue') },
+
         // Player list + detail
         { path: 'player',           name: 'player-list',     component: () => import('pages/PlayerPage.vue') },
         { path: 'player/:name',     name: 'player-detail',
           component: () => import('pages/PlayerDetail.vue'),
           props: true
         },
-  
+
         // Alliance list + detail
         { path: 'alliance',         name: 'alliance-list',   component: () => import('pages/AlliancePage.vue') },
         { path: 'alliance/:tag',    name: 'alliance-detail',
           component: () => import('pages/AllianceDetail.vue'),
           props: true
         },
-  
+
         // Region list + detail
         { path: 'region',           name: 'region-list',     component: () => import('pages/RegionPage.vue') },
         { path: 'region/:name',     name: 'region-detail',
@@ -39,11 +40,11 @@ const routes = [
         }
       ]
     },
-  
-    // 3. Catch-all → map
+
+    // 3. Catch-all → landing
     {
       path: '/:catchAll(.*)*',
-      redirect: { name: 'global-map' }
+      redirect: { name: 'landing' }
     }
   ]
   
