@@ -496,8 +496,28 @@ const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimation
 
 async function loadAll() {
   try {
+    let playerTribe = null
+    
+    // First try to get player's tribe from the players list
+    try {
+      const playersResponse = await api.get('/api/players')
+      const player = playersResponse.data?.find(p => p.name === playerName.value)
+      if (player) {
+        playerTribe = player.tribe
+        console.log('Found player tribe from players list:', playerTribe)
+      } else {
+        console.log('Player not found in players list')
+      }
+    } catch (e) {
+      console.warn('Could not fetch players list:', e.message)
+    }
+    
+    // Then get the villages
     const { data } = await api.get(`/api/player/${encodeURIComponent(playerName.value)}/villages`)
-    villages.value = (data.villages || []).map(r => ({
+    const villagesData = data.villages || []
+    
+    // Process villages data
+    villages.value = villagesData.map(r => ({
       village:       r.village_name,
       coords:        `(${r.x},${r.y})`,
       x:             r.x,
@@ -506,10 +526,11 @@ async function loadAll() {
       victoryPoints: Number(r.victory_points || 0),
       alliance:      r.alliance_tag || '',
       region:        r.region || '',
-      tribe:         mapTribe(r.tribe),
+      tribe:         playerTribe ? mapTribe(playerTribe) : mapTribe(r.tribe),
       player:        r.player_name || '',
       player_id:     r.player_id || r.playerId || null
     }))
+    
     playerId.value = villages.value[0]?.player_id || null
 
     await nextTick()
