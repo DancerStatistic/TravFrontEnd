@@ -1,0 +1,51 @@
+// src/router/routes.js
+/**
+ * @type {import('vue-router').RouteRecordRaw[]}
+ */
+const routes = [
+    // 1. Public login (no layout)
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('pages/LoginPage.vue')
+    },
+  
+    // 2. All other routes use MainLayout
+    {
+      path: '/',
+      component: () => import('layouts/MainLayout.vue'),
+      children: [
+        { path: '',                 name: 'global-map',      component: () => import('pages/GlobalMap.vue') },
+  
+        // Player list + detail
+        { path: 'player',           name: 'player-list',     component: () => import('pages/PlayerPage.vue') },
+        { path: 'player/:name',     name: 'player-detail',
+          component: () => import('pages/PlayerDetail.vue'),
+          props: true
+        },
+  
+        // Alliance list + detail
+        { path: 'alliance',         name: 'alliance-list',   component: () => import('pages/AlliancePage.vue') },
+        { path: 'alliance/:tag',    name: 'alliance-detail',
+          component: () => import('pages/AllianceDetail.vue'),
+          props: true
+        },
+  
+        // Region list + detail
+        { path: 'region',           name: 'region-list',     component: () => import('pages/RegionPage.vue') },
+        { path: 'region/:name',     name: 'region-detail',
+          component: () => import('pages/RegionDetail.vue'),
+          props: true
+        }
+      ]
+    },
+  
+    // 3. Catch-all → map
+    {
+      path: '/:catchAll(.*)*',
+      redirect: { name: 'global-map' }
+    }
+  ]
+  
+  export default routes
+  

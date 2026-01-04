@@ -1,0 +1,30 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo trigger "$CODEBUILD_WEBHOOK_TRIGGER"
+      - echo build number "$CODEBUILD_BUILD_NUMBER"
+      - echo resolved source version "$CODEBUILD_RESOLVED_SOURCE_VERSION"
+      - echo start time "$CODEBUILD_START_TIME"
+      - node --version >node.txt
+      - cat node.txt
+      - yum install jq
+      - jq '.build = "'"$CODEBUILD_BUILD_NUMBER"'" | .date = "'"$CODEBUILD_START_TIME"'" | .rsv = "'"$CODEBUILD_RESOLVED_SOURCE_VERSION"'"' ./public/version.json > temp.json && mv -f temp.json ./public/version.json
+      - cat ./public/version.json
+      - echo Running npm install...
+      - npm install
+  build:
+    commands:
+      - echo Build starting...
+      - echo $CODEBUILD_WEBHOOK_TRIGGER
+      - npm run build
+  post_build:
+    commands:
+      - echo tar starting to $CODEBUILD_WEBHOOK_TRIGGER.tar.gz...
+      - cd dist/spa
+      - tar -czvf - *| aws s3 cp - s3://yellatestbucket/ambuilds/$CODEBUILD_WEBHOOK_TRIGGER.tar.gz
+      - echo "Done."
+      - aws s3 presign s3://yellatestbucket/ambuilds/$CODEBUILD_WEBHOOK_TRIGGER.tar.gz --region eu-west-1 >url.txt
+      - curl --request POST https://nebula.yella.tv/image/ambuild?$CODEBUILD_WEBHOOK_TRIGGER -d @url.txt -H "Content-Type:text/plain"
+      - echo tar sent...

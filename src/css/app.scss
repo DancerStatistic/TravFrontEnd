@@ -1,0 +1,61 @@
+// app global css in SCSS form
+.expanded-content {
+  background: $grey-1;
+  & :deep(.q-td)::before {
+    background: none;
+  }
+}
+
+.chip-green {
+  color: $green-10;
+  background: $green-2;
+}
+.chip-amber {
+  color: $orange-9;
+  background: $amber-2;
+}
+.chip-red {
+  color: $red-10;
+  background: $red-2;
+}
+
+.chip-amber {
+  color: $amber-10;
+  background: $amber-2;
+}
+
+.chip-light-grey {
+  color: $grey-10;
+  background: $grey-3;
+}
+
+.chip-grey {
+  color: $grey-10;
+  background: $grey-5;
+}
+
+.chip-blue {
+  color: $blue-10;
+  background: $blue-2;
+}
+
+.tab-black {
+  color: #000;
+}
+.tab-green {
+  color: $green-6;
+}
+.tab-amber {
+  color: $amber-8;
+}
+.tab-red {
+  color: $red-10;
+}
+
+.tab-grey {
+  color: $grey-6;
+}
+
+.tab-blue {
+  color: $blue-12;
+}
