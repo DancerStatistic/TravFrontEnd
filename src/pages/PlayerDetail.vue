@@ -18,7 +18,10 @@
 
         <q-btn
           v-if="playerId"
-          dense flat round icon="open_in_new"
+          dense
+          flat
+          round
+          icon="open_in_new"
           :href="profileLink"
           target="_blank"
         >
@@ -34,169 +37,382 @@
 
     <!-- Content -->
     <div v-else class="q-pa-md content-wrap">
-      <!-- Map -->
-      <q-card flat bordered class="map-card q-mb-lg">
-        <q-card-section class="row items-center q-gutter-sm">
-          <div class="text-subtitle2">Villages map</div>
-          <q-space />
-          <q-btn flat dense icon="center_focus_strong" @click="fitToContent">
-            <q-tooltip>Fit to player villages</q-tooltip>
-          </q-btn>
-          <q-btn flat dense icon="refresh" @click="resetView">
-            <q-tooltip>Reset view</q-tooltip>
-          </q-btn>
-        </q-card-section>
+      <div class="row q-col-gutter-md">
+        <!-- Left Column: Player Stats -->
+        <div class="col-12 col-md-4">
+          <q-card flat bordered class="q-mb-md">
+            <q-card-section class="bg-primary text-white">
+              <div class="text-h6">Player Statistics</div>
+            </q-card-section>
 
-        <div class="map-area" ref="mapAreaEl" @contextmenu.capture="onContextMenu">
-          <svg
-            class="map-svg"
-            ref="svg"
-            viewBox="-200 -200 400 400"
-            preserveAspectRatio="xMidYMid meet"
-            @mouseleave="hideTooltip"
-            @pointerdown="onPointerDown"
-            @pointermove="onPointerMove"
-            @pointerup="onPointerUp"
-          >
-            <defs>
-              <pattern id="grid1" width="1" height="1" patternUnits="userSpaceOnUse">
-                <path d="M1 0 L0 0 0 1" fill="none" stroke="#343434" stroke-width="0.05" />
-              </pattern>
-              <pattern id="grid10" width="10" height="10" patternUnits="userSpaceOnUse">
-                <rect width="10" height="10" fill="url(#grid1)" />
-                <path d="M10 0 L0 0 0 10" fill="none" stroke="#585858" stroke-width="0.15" />
-              </pattern>
-            </defs>
+            <q-card-section v-if="villages.length > 0" class="q-pa-none">
+              <q-list>
+                <q-item>
+                  <q-item-section>
+                    <q-item-label>Total Villages</q-item-label>
+                    <q-item-label caption>{{ kpis.villages }}</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-icon name="home" color="primary" />
+                  </q-item-section>
+                </q-item>
 
-            <g ref="viewportEl">
-              <!-- background -->
-              <image
-                x="-200" y="-200" width="400" height="400"
-                :href="bgUrl" :xlink:href="bgUrl"
-                preserveAspectRatio="none" opacity="0.65"
+                <q-separator />
+
+                <q-item>
+                  <q-item-section>
+                    <q-item-label>Total Population</q-item-label>
+                    <q-item-label caption>{{ kpis.population.toLocaleString() }}</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-icon name="groups" color="green" />
+                  </q-item-section>
+                </q-item>
+
+                <q-separator />
+
+                <q-item>
+                  <q-item-section>
+                    <q-item-label>Victory Points</q-item-label>
+                    <q-item-label caption>{{ kpis.vp.toLocaleString() }}</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-icon name="military_tech" color="amber" />
+                  </q-item-section>
+                </q-item>
+              </q-list>
+            </q-card-section>
+
+            <q-card-section v-else class="text-center q-pa-lg">
+              <q-spinner color="primary" size="3em" />
+              <div class="q-mt-sm">Loading player data...</div>
+            </q-card-section>
+          </q-card>
+
+          <q-card flat bordered class="q-mb-md">
+            <q-card-section class="bg-primary text-white">
+              <div class="text-h6">Village Distribution by Tribe</div>
+            </q-card-section>
+            <q-card-section>
+              <div v-if="villages.length > 0">
+                <div v-for="tribe in tribeDistribution" :key="tribe.name" class="q-mb-sm">
+                  <div class="row items-center q-gutter-sm">
+                    <div class="col-3 text-right">
+                      <q-badge :color="getTribeColor(tribe.name)" class="text-body2">
+                        {{ tribe.name || 'Unknown' }}
+                      </q-badge>
+                    </div>
+                    <div class="col-6">
+                      <q-linear-progress
+                        :value="tribe.count / villages.length"
+                        :color="getTribeColor(tribe.name)"
+                        size="20px"
+                      >
+                        <div class="absolute-full flex flex-center">
+                          <q-badge
+                            :color="getTribeColor(tribe.name, true)"
+                            :text-color="$q.dark.isActive ? 'white' : 'dark'"
+                            :label="`${tribe.count} (${((tribe.count / villages.length) * 100).toFixed(1)}%)`"
+                          />
+                        </div>
+                      </q-linear-progress>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="text-center q-pa-lg">
+                <q-spinner color="primary" size="2em" />
+                <div class="q-mt-sm">Loading village data...</div>
+              </div>
+            </q-card-section>
+          </q-card>
+        </div>
+
+        <!-- Right Column: Map -->
+        <div class="col-12 col-md-8">
+          <q-card flat bordered class="map-card">
+            <q-card-section class="row items-center q-gutter-sm">
+              <div class="text-subtitle2">Villages Map</div>
+              <q-space />
+              <q-btn flat dense icon="center_focus_strong" @click="fitToContent">
+                <q-tooltip>Fit to player villages</q-tooltip>
+              </q-btn>
+              <q-btn flat dense icon="refresh" @click="resetView">
+                <q-tooltip>Reset view</q-tooltip>
+              </q-btn>
+            </q-card-section>
+
+            <div
+              class="map-area"
+              ref="mapAreaEl"
+              @contextmenu.capture="onContextMenu"
+              style="min-height: 500px;"
+            >
+              <svg
+                class="map-svg"
+                ref="svg"
+                viewBox="-200 -200 400 400"
+                preserveAspectRatio="xMidYMid meet"
+                @mouseleave="hideTooltip"
+                @pointerdown="onPointerDown"
+                @pointermove="onPointerMove"
+                @pointerup="onPointerUp"
+              >
+                <defs>
+                  <pattern id="grid1" width="1" height="1" patternUnits="userSpaceOnUse">
+                    <path d="M1 0 L0 0 0 1" fill="none" stroke="#343434" stroke-width="0.05" />
+                  </pattern>
+                  <pattern id="grid10" width="10" height="10" patternUnits="userSpaceOnUse">
+                    <rect width="10" height="10" fill="url(#grid1)" />
+                    <path d="M10 0 L0 0 0 10" fill="none" stroke="#585858" stroke-width="0.15" />
+                  </pattern>
+                </defs>
+
+                <g ref="viewportEl">
+                  <!-- background -->
+                  <image
+                    x="-200"
+                    y="-200"
+                    width="400"
+                    height="400"
+                    :href="bgUrl"
+                    :xlink:href="bgUrl"
+                    preserveAspectRatio="none"
+                    opacity="0.65"
+                  />
+
+                  <!-- grid & axes -->
+                  <rect x="-200" y="-200" width="400" height="400" fill="url(#grid10)" />
+                  <line
+                    x1="-200"
+                    y1="0"
+                    x2="200"
+                    y2="0"
+                    stroke="#9e9e9e"
+                    stroke-width="1.2"
+                    vector-effect="non-scaling-stroke"
+                  />
+                  <line
+                    x1="0"
+                    y1="-200"
+                    x2="0"
+                    y2="200"
+                    stroke="#9e9e9e"
+                    stroke-width="1.2"
+                    vector-effect="non-scaling-stroke"
+                  />
+                  <rect
+                    x="-200"
+                    y="-200"
+                    width="400"
+                    height="400"
+                    fill="none"
+                    stroke="#00e5ff"
+                    stroke-width="1.2"
+                    opacity="0.25"
+                    vector-effect="non-scaling-stroke"
+                  />
+
+                  <!-- markers -->
+                  <g ref="markersGroup" id="markersLayer"></g>
+
+                  <!-- hover highlight -->
+                  <g id="overlayLayer">
+                    <circle
+                      v-if="selection"
+                      :cx="selection.x"
+                      :cy="selection.y"
+                      :r="2.4"
+                      fill="none"
+                      stroke="#00e5ff"
+                      stroke-width="0.8"
+                      vector-effect="non-scaling-stroke"
+                    />
+                    <circle
+                      v-if="selection"
+                      :cx="selection.x"
+                      :cy="selection.y"
+                      :r="0.9"
+                      fill="#00e5ff"
+                      opacity="0.85"
+                    />
+                  </g>
+
+                  <circle cx="0" cy="0" r="0.9" fill="#ff5252" opacity="0.9" />
+                </g>
+
+                <!-- screen-fixed coord labels -->
+                <g>
+                  <text
+                    ref="labelLeft"
+                    text-anchor="end"
+                    alignment-baseline="middle"
+                    class="coord-label"
+                  />
+                  <text
+                    ref="labelRight"
+                    text-anchor="start"
+                    alignment-baseline="middle"
+                    class="coord-label"
+                  />
+                  <text
+                    ref="labelTop"
+                    text-anchor="middle"
+                    alignment-baseline="hanging"
+                    class="coord-label"
+                  />
+                  <text
+                    ref="labelBottom"
+                    text-anchor="middle"
+                    alignment-baseline="baseline"
+                    class="coord-label"
+                  />
+                </g>
+              </svg>
+
+              <!-- Tooltip -->
+              <div
+                v-if="tooltip.show"
+                class="tooltip"
+                :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }"
+                v-html="tooltip.content"
               />
-              <!-- grid & axes -->
-              <rect x="-200" y="-200" width="400" height="400" fill="url(#grid10)"/>
-              <line x1="-200" y1="0" x2="200" y2="0" stroke="#9e9e9e" stroke-width="1.2" vector-effect="non-scaling-stroke" />
-              <line x1="0"   y1="-200" x2="0"   y2="200" stroke="#9e9e9e" stroke-width="1.2" vector-effect="non-scaling-stroke" />
-              <rect x="-200" y="-200" width="400" height="400" fill="none" stroke="#00e5ff" stroke-width="1.2" opacity="0.25" vector-effect="non-scaling-stroke" />
+            </div>
 
-              <!-- markers -->
-              <g ref="markersGroup" id="markersLayer"></g>
+            <div class="statusbar row items-center q-px-sm q-py-xs">
+              <div class="col text-caption">
+                Cursor: X {{ cursor.x.toFixed(0) }} / Y {{ cursor.y.toFixed(0) }}
+              </div>
+              <div class="col text-caption text-right">
+                Zoom: {{ zoomK.toFixed(2) }}×
+              </div>
+            </div>
 
-              <!-- hover highlight -->
-              <g id="overlayLayer">
-                <circle v-if="selection" :cx="selection.x" :cy="selection.y" :r="2.4"
-                        fill="none" stroke="#00e5ff" stroke-width="0.8" vector-effect="non-scaling-stroke" />
-                <circle v-if="selection" :cx="selection.x" :cy="selection.y" :r="0.9"
-                        fill="#00e5ff" opacity="0.85" />
-              </g>
+            <!-- Enhanced Context Menu -->
+            <q-menu
+              v-model="showContextMenu"
+              context-menu
+              touch-position
+              @before-show="onBeforeContextMenuShow"
+              @hide="onContextMenuHide"
+              :style="{ left: `${contextPosition.x}px`, top: `${contextPosition.y}px` }"
+              class="context-menu"
+            >
+              <q-list>
+                <q-item-label header>Village Actions</q-item-label>
 
-              <circle cx="0" cy="0" r="0.9" fill="#ff5252" opacity="0.9" />
-            </g>
+                <q-item clickable v-close-popup @click="centerOnContext" :disable="!ctx.hasMarker">
+                  <q-item-section avatar><q-icon name="center_focus_strong" /></q-item-section>
+                  <q-item-section>Center on village</q-item-section>
+                </q-item>
 
-            <!-- screen-fixed coord labels -->
-            <g>
-              <text ref="labelLeft"   text-anchor="end"    alignment-baseline="middle" class="coord-label"/>
-              <text ref="labelRight"  text-anchor="start"  alignment-baseline="middle" class="coord-label"/>
-              <text ref="labelTop"    text-anchor="middle" alignment-baseline="hanging" class="coord-label"/>
-              <text ref="labelBottom" text-anchor="middle" alignment-baseline="baseline" class="coord-label"/>
-            </g>
-          </svg>
+                <q-item clickable v-close-popup @click="copyCoordinates">
+                  <q-item-section avatar><q-icon name="content_copy" /></q-item-section>
+                  <q-item-section>Copy coordinates</q-item-section>
+                </q-item>
 
-          <!-- Tooltip -->
-          <div
-            v-if="tooltip.show"
-            class="tooltip"
-            :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }"
-            v-html="tooltip.content"
-          />
+                <q-item clickable v-close-popup :href="getTravianMapLink" target="_blank">
+                  <q-item-section avatar><q-icon name="open_in_new" /></q-item-section>
+                  <q-item-section>Open in Travian Map</q-item-section>
+                </q-item>
+
+                <q-separator />
+
+                <q-item-label header>Map Controls</q-item-label>
+
+                <q-item clickable v-close-popup @click="fitToContent">
+                  <q-item-section avatar><q-icon name="zoom_out_map" /></q-item-section>
+                  <q-item-section>Fit to villages</q-item-section>
+                </q-item>
+
+                <q-item clickable v-close-popup @click="resetView">
+                  <q-item-section avatar><q-icon name="refresh" /></q-item-section>
+                  <q-item-section>Reset view</q-item-section>
+                </q-item>
+              </q-list>
+            </q-menu>
+          </q-card>
         </div>
-
-        <div class="statusbar row items-center q-px-sm q-py-xs">
-          <div class="col text-caption">Cursor: X {{ cursor.x.toFixed(0) }} / Y {{ cursor.y.toFixed(0) }}</div>
-          <div class="col text-caption text-right">Zoom: {{ zoomK.toFixed(2) }}×</div>
-        </div>
-
-        <!-- Right-click -->
-        <q-menu context-menu touch-position>
-          <q-list style="min-width: 220px">
-            <q-item-label header>Map</q-item-label>
-            <q-item clickable :disable="!ctx.hasMarker" v-close-popup @click="centerOnContext">
-              <q-item-section avatar><q-icon name="center_focus_strong" /></q-item-section>
-              <q-item-section>Center on this village</q-item-section>
-            </q-item>
-          </q-list>
-        </q-menu>
-      </q-card>
+      </div>
 
       <!-- Villages table -->
-      <q-card flat bordered>
-        <q-card-section class="row items-center q-gutter-sm">
-          <q-input
-            v-model="filter"
-            dense outlined clearable debounce="150"
-            placeholder="Filter villages / coords / alliance / region / tribe…"
-            class="col-12 col-sm-6"
+      <div class="q-mt-md">
+        <q-card flat bordered>
+          <q-card-section class="row items-center q-gutter-sm">
+            <q-input
+              v-model="filter"
+              dense
+              outlined
+              clearable
+              debounce="150"
+              placeholder="Filter villages / coords / alliance / region / tribe…"
+              class="col-12 col-sm-6"
+            >
+              <template #append><q-icon name="search" /></template>
+            </q-input>
+            <q-space />
+            <q-btn flat dense icon="file_download" @click="downloadCsv" :disable="!villages.length">
+              <q-tooltip>Download CSV</q-tooltip>
+            </q-btn>
+          </q-card-section>
+
+          <q-table
+            :columns="columns"
+            :rows="villagesFiltered"
+            row-key="coords"
+            flat
+            bordered
+            separator="cell"
+            :pagination="pagination"
+            :rows-per-page-options="[10, 20, 50, 0]"
+            :filter="filter"
+            dense
+            wrap-cells
+            @row-click="(_, row) => centerFromCoords(row.coords)"
           >
-            <template #append><q-icon name="search" /></template>
-          </q-input>
-          <q-space />
-          <q-btn flat dense icon="file_download" @click="downloadCsv" :disable="!villages.length">
-            <q-tooltip>Download CSV</q-tooltip>
-          </q-btn>
-        </q-card-section>
+            <template #body-cell-coords="props">
+              <q-td :props="props">
+                <a
+                  :href="makeMapLink(props.row.coords)"
+                  target="_blank"
+                  rel="noopener"
+                  @mouseenter="hoverCoords(props.row.coords)"
+                  @mouseleave="selection = null"
+                  @click.stop
+                >
+                  {{ props.row.coords }}
+                </a>
+              </q-td>
+            </template>
 
-        <q-table
-          :columns="columns"
-          :rows="villagesFiltered"
-          row-key="coords"
-          flat bordered separator="cell"
-          :pagination="pagination"
-          :rows-per-page-options="[10,20,50,0]"
-          :filter="filter"
-          dense
-          wrap-cells
-          @row-click="(_, row) => centerFromCoords(row.coords)"
-        >
-          <template #body-cell-coords="props">
-            <q-td :props="props">
-              <a
-                :href="makeMapLink(props.row.coords)"
-                target="_blank" rel="noopener"
-                @mouseenter="hoverCoords(props.row.coords)"
-                @mouseleave="selection = null"
-                @click.stop
-              >{{ props.row.coords }}</a>
-            </q-td>
-          </template>
+            <template #body-cell-alliance="props">
+              <q-td :props="props">
+                <RouterLink
+                  v-if="props.row.alliance"
+                  :to="{ name: 'alliance-detail', params: { tag: props.row.alliance } }"
+                >
+                  {{ props.row.alliance }}
+                </RouterLink>
+                <span v-else class="text-grey-6">—</span>
+              </q-td>
+            </template>
 
-          <template #body-cell-alliance="props">
-            <q-td :props="props">
-              <RouterLink
-                v-if="props.row.alliance"
-                :to="{ name:'alliance-detail', params:{ tag: props.row.alliance } }"
-              >
-                {{ props.row.alliance }}
-              </RouterLink>
-              <span v-else class="text-grey-6">—</span>
-            </q-td>
-          </template>
+            <template #body-cell-tribe="props">
+              <q-td :props="props">
+                <q-badge outline color="grey-7">{{ props.row.tribe }}</q-badge>
+              </q-td>
+            </template>
 
-          <template #body-cell-tribe="props">
-            <q-td :props="props">
-              <q-badge outline color="grey-7">{{ props.row.tribe }}</q-badge>
-            </q-td>
-          </template>
-
-          <template #no-data>
-            <div class="text-center q-mt-md">No villages found.</div>
-          </template>
-        </q-table>
-      </q-card>
+            <template #no-data>
+              <div class="text-center q-mt-md">No villages found.</div>
+            </template>
+          </q-table>
+        </q-card>
+      </div>
     </div>
   </q-page>
 </template>
+
 
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
@@ -270,6 +486,41 @@ function mapTribe(t) {
 const villages   = ref([])
 const filter     = ref('')
 const pagination = ref({ page:1, rowsPerPage:10 })
+
+// Compute tribe distribution for the village distribution chart
+const tribeDistribution = computed(() => {
+  const tribes = {};
+  
+  villages.value.forEach(village => {
+    const tribeName = village.tribe || 'Unknown';
+    if (!tribes[tribeName]) {
+      tribes[tribeName] = 0;
+    }
+    tribes[tribeName]++;
+  });
+
+  return Object.entries(tribes)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+});
+
+// Get color for each tribe
+function getTribeColor(tribeName, isLight = false) {
+  const colors = {
+    'Roman': 'blue',
+    'Teuton': 'grey',
+    'Gaul': 'green',
+    'Nature': 'light-green',
+    'Natar': 'red',
+    'Egyptian': 'amber',
+    'Hun': 'brown',
+    'Spartan': 'red-10',
+    'Unknown': 'grey-6'
+  };
+
+  const baseColor = colors[tribeName] || 'grey-5';
+  return isLight ? `${baseColor}-2` : baseColor;
+}
 const columns = [
   { name:'village',       label:'Village',      field:'village',       align:'left',  sortable:true },
   { name:'coords',        label:'Coords',       field:'coords',        align:'left',  sortable:true },
@@ -347,10 +598,11 @@ function getContainerRect () {
   const r = el.getBoundingClientRect()
   return (r.width > 0 && r.height > 0) ? r : null
 }
-function toMapCoords (evt) {
-  const [sx, sy] = d3.pointer(evt, svg.value)
-  const t = d3.zoomTransform(svg.value)
-  return { x: t.invertX(sx), y: t.invertY(sy) }
+function toMapCoords(evt) {
+  if (!svg.value) return { x: 0, y: 0 }
+  const pt = new DOMPoint(evt.clientX, evt.clientY)
+  const svgPt = pt.matrixTransform(svg.value.getScreenCTM().inverse())
+  return { x: svgPt.x, y: svgPt.y }
 }
 
 function updateLabels () {
@@ -397,16 +649,26 @@ function snapBack() {
   }
 }
 
-function centerAt (x, y, k = d3.zoomTransform(svg.value).k || 1) {
+function centerAt(x, y, k = d3.zoomTransform(svg.value).k || 1) {
   const rect = getContainerRect()
   if (!rect || !Number.isFinite(x) || !Number.isFinite(y)) return
-  k = Number.isFinite(k) && k > 0 ? k : 1
-  const tx = rect.width  / 2 - k * x
+  
+  k = Math.max(0.1, Math.min(k, 50)) // Ensure k is within reasonable bounds
+  const tx = rect.width / 2 - k * x
   const ty = rect.height / 2 - k * y
+  
   suppressSnap = true
-  d3.select(svg.value).transition().duration(200)
-    .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(k))
-    .on('end', () => { suppressSnap = false })
+  d3.select(svg.value)
+    .transition()
+    .duration(200)
+    .call(
+      zoom.transform,
+      d3.zoomIdentity.translate(tx, ty).scale(k)
+    )
+    .on('end', () => { 
+      suppressSnap = false 
+      updateLabels()
+    })
 }
 
 /* fit to the actual villages (built from rows) */
@@ -423,20 +685,59 @@ function villagesBBox() {
   }
   return { x:minx, y:miny, width:maxx-minx, height:maxy-miny }
 }
-function fitToContent () {
+function fitToContent() {
   const rect = getContainerRect()
-  if (!rect) return
+  if (!rect || !villages.value.length) return
+  
   const bbox = villagesBBox()
-  const pad = 1.06
-  const k = Math.max(0.5, Math.min(rect.width / (bbox.width * pad), rect.height / (bbox.height * pad)))
+  const pad = 1.2 // Slightly more padding
+  const k = Math.min(
+    rect.width / (bbox.width * pad),
+    rect.height / (bbox.height * pad)
+  )
+  
   const cx = bbox.x + bbox.width / 2
   const cy = bbox.y + bbox.height / 2
-  centerAt(cx, cy, k)
+  const kClamped = Math.max(0.5, Math.min(k, 10)) // Limit max zoom
+  
+  centerAt(cx, cy, kClamped)
 }
-function resetView () { centerAt(0, 0, 1) }
+function resetView() {
+  const rect = getContainerRect()
+  if (!rect) return
+  
+  // Calculate the scale to fit the world view
+  const worldWidth = WORLD.x1 - WORLD.x0
+  const worldHeight = WORLD.y1 - WORLD.y0
+  const scaleX = rect.width / (worldWidth * 1.1)  // 10% padding
+  const scaleY = rect.height / (worldHeight * 1.1) // 10% padding
+  const scale = Math.min(scaleX, scaleY, 1) // Don't zoom in beyond 1:1
+  
+  // Center the view
+  const tx = (rect.width - worldWidth * scale) / 2 - WORLD.x0 * scale
+  const ty = (rect.height - worldHeight * scale) / 2 - WORLD.y0 * scale
+  
+  // Apply the transform
+  suppressSnap = true
+  d3.select(svg.value)
+    .transition()
+    .duration(200)
+    .call(
+      zoom.transform,
+      d3.zoomIdentity
+        .translate(tx, ty)
+        .scale(scale)
+    )
+    .on('end', () => {
+      suppressSnap = false
+      updateLabels()
+    })
+}
 
 /* pointer + context (throttled UI updates) */
 let cursorTick = 0
+const showContextMenu = ref(false)
+const contextPosition = ref({ x: 0, y: 0 })
 function onPointerDown (evt) { throttledCursor(evt) }
 function onPointerMove (evt) { throttledCursor(evt) }
 function onPointerUp   (evt) { throttledCursor(evt) }
@@ -449,16 +750,73 @@ function throttledCursor(evt) {
 }
 function hideTooltip() { tooltip.value.show = false }
 
-function onContextMenu (e) {
+function onContextMenu(e) {
+  e.preventDefault()
   const el = e.target.closest('.marker')
   ctx.hasMarker = !!el
+  
+  // Remove previous highlight if any
+  d3.select(svg.value).selectAll('.marker.highlighted')
+    .classed('highlighted', false)
+    .attr('width', 1)
+    .attr('height', 1)
+    .attr('x', d => d.x - 0.5)
+    .attr('y', d => d.y - 0.5)
+  
   if (el) {
+    // Highlight the selected village
+    const marker = d3.select(el)
+    marker
+      .classed('highlighted', true)
+      .attr('width', 2)
+      .attr('height', 2)
+      .attr('x', d => d.x - 1)
+      .attr('y', d => d.y - 1)
+      
     const bb = el.getBBox()
     ctx.point = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 }
   } else {
     ctx.point = toMapCoords(e)
   }
+  
+  // Prevent any zoom behavior
+  if (e.type === 'dblclick') {
+    e.stopPropagation()
+    return false
+  }
+  
+  contextPosition.value = { x: e.clientX, y: e.clientY }
+  showContextMenu.value = true
+  return false
 }
+
+function onBeforeContextMenuShow() {
+  document.addEventListener('click', handleClickOutside)
+}
+
+function onContextMenuHide() {
+  document.removeEventListener('click', handleClickOutside)
+}
+
+function handleClickOutside(event) {
+  if (showContextMenu.value && !event.target.closest('.q-menu')) {
+    showContextMenu.value = false
+  }
+}
+
+function copyCoordinates() {
+  if (ctx.point) {
+    const coords = `${Math.round(ctx.point.x)},${Math.round(-ctx.point.y)}`
+    navigator.clipboard.writeText(coords)
+  }
+}
+
+const getTravianMapLink = computed(() => {
+  if (!ctx.point) return '#'
+  const x = Math.round(ctx.point.x)
+  const y = Math.round(-ctx.point.y)
+  return `https://ts1.x1.europe.travian.com/karte.php?x=${x}&y=${y}`
+})
 function centerOnContext () { if (ctx.point) centerAt(ctx.point.x, ctx.point.y) }
 
 /* hover from table */
@@ -509,8 +867,20 @@ function drawMarkers() {
     .attr('shape-rendering', 'crispEdges')
     .attr('vector-effect', 'non-scaling-stroke')
     .on('pointerover', (e, d) => {
+      const coords = toMapCoords(e)
       const tip = `Village: ${d.village}<br>Player: ${d.player}<br>Population: ${d.population.toLocaleString()}<br>Alliance: ${d.alliance}<br>Tribe: ${d.tribe}`
-      tooltip.value = { show:true, x:e.clientX+8, y:e.clientY+8, content: sanitizeTooltip(tip) }
+      
+      // Get the current transform to convert from SVG to screen coordinates
+      const transform = d3.zoomTransform(svg.value)
+      const screenX = transform.applyX(coords.x) + 10
+      const screenY = transform.applyY(coords.y) + 10
+      
+      tooltip.value = { 
+        show: true, 
+        x: screenX, 
+        y: screenY, 
+        content: sanitizeTooltip(tip) 
+      }
       ctx.hasMarker = true
     })
     .on('pointerout', () => hideTooltip())
@@ -528,116 +898,231 @@ function resetState() {
 const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
 async function loadAll() {
+  console.log('loadAll called for player:', playerName.value);
+  
   // Validate player name before making any API calls
   if (!playerName.value) {
     error.value = 'No player name provided.'
-    return
+    console.error('No player name provided');
+    return false;
   }
 
   try {
     let playerTribe = null
     
-    // First try to get player's tribe from the players list
+    // Try to get player info to determine tribe
     try {
-      const playersResponse = await api.get('/api/players')
-      const player = playersResponse.data?.find(p => p.name === playerName.value)
+      console.log('Fetching players list...');
+      const playersResponse = await api.get('/api/players');
+      console.log('Players list response:', playersResponse);
+      
+      const player = playersResponse.data?.find(p => p.name === playerName.value);
       
       if (player) {
-        // Debug: To see player data in console
-        window.debugPlayer = player
-        
-        // Try different possible tribe field names
-        playerTribe = player.tribe_id || player.tribeId || player.tribe || null
+        console.log('Found player in players list:', player);
+        window.debugPlayer = player;
+        playerTribe = player.tribe_id || player.tribeId || player.tribe || null;
+        console.log('Player tribe:', playerTribe);
       } else {
-        console.log('Player not found in players list')
+        console.warn('Player not found in players list');
       }
     } catch (e) {
-      console.warn('Could not fetch players list:', e.message)
+      console.warn('Could not fetch players list:', e);
     }
     
-    // Then get the villages
-    if (!playerName.value) {
-      throw new Error('Player name is required')
-    }
-    
-    const { data } = await api.get(`/api/player/${encodeURIComponent(playerName.value)}/villages`)
-    const villagesData = data?.villages || []
-    
-    // Debug: To see village data in console, use:
-    // window.debugVillage = () => villagesData[0]
-    
-    // Process villages data
-    villages.value = villagesData.map(r => {
-      // Try to get tribe from different possible fields
-      const villageTribe = r.tribe_id || r.tribeId || r.tribe || 'Unknown'
+    // Fetch villages for the player
+    try {
+      console.log(`Fetching villages for player: ${playerName.value}`);
+      const response = await api.get(`/api/player/${encodeURIComponent(playerName.value)}/villages`);
+      console.log('Villages API response:', response);
       
-      return {
-        village:       r.village_name,
-        coords:        `(${r.x},${r.y})`,
-        x:             r.x,
-        y:             r.y,
-        population:    Number(r.population || 0),
-        victoryPoints: Number(r.victory_points || 0),
-        alliance:      r.alliance_tag || '',
-        region:        r.region || '',
-        tribe:         mapTribe(villageTribe),
-        player:        r.player_name || '',
-        player_id:     r.player_id || r.playerId || null
+      const villagesData = response.data?.villages || [];
+      console.log('Villages data:', villagesData);
+      
+      if (!villagesData.length) {
+        console.warn('No villages data received or empty array');
+        error.value = 'No villages found for this player.';
+        return false;
       }
-    })
+      
+      window.debugVillage = () => villagesData[0];
+      
+      // Process villages data
+      villages.value = villagesData.map(r => {
+        console.log('Processing village:', r);
+        const villageTribe = r.tribe_id || r.tribeId || r.tribe || 'Unknown';
+        
+        return {
+          village:       r.village_name || r.name || 'Unnamed Village',
+          coords:        `(${r.x},${r.y})`,
+          x:             Number(r.x) || 0,
+          y:             Number(r.y) || 0,
+          population:    Number(r.population || 0),
+          victoryPoints: Number(r.victory_points || r.victoryPoints || 0),
+          alliance:      r.alliance_tag || r.alliance || '',
+          region:        r.region || '',
+          tribe:         playerTribe ? mapTribe(playerTribe) : mapTribe(villageTribe),
+          player:        r.player_name || r.playerName || playerName.value,
+          player_id:     r.player_id || r.playerId || null
+        };
+      });
+      
+      console.log('Processed villages:', villages.value);
+      
+      playerId.value = villages.value[0]?.player_id || null;
+      console.log('Set playerId:', playerId.value);
+      
+      return true;
+      
+    } catch (e) {
+      console.error('Error fetching villages:', e);
+      error.value = `Failed to load villages for "${playerName.value}".`;
+      return false;
+    }
     
-    playerId.value = villages.value[0]?.player_id || null
-
-    await nextTick()
-    await raf2()        // allow layout to settle
-    ensureZoom()
-    drawMarkers()
-    fitToContent()
-    updateLabels()
   } catch (e) {
-    console.error(e)
-    error.value = `Failed to load data for “${playerName.value}”.`
+    console.error('Error in loadAll:', e);
+    error.value = `Failed to load data for "${playerName.value}".`;
+    return false;
   }
 }
 
 /* zoom init + resize */
+/* zoom init + resize */
 let zoomInited = false
 let roMap = null
-let zoomTick = 0
-function ensureZoom() {
-  if (zoomInited) return
-  zoom = d3.zoom()
-    .scaleExtent([0.5, 50])
-    .extent(() => {
-      const r = getContainerRect()
-      return r ? [[0, 0], [r.width, r.height]] : [[0, 0], [1000, 1000]]
-    })
-    .on('zoom', ({ transform }) => {
-      d3.select(viewportEl.value).attr('transform', transform)
-      // throttle zoom readout to keep UI snappy
-      const now = performance.now()
-      if (now - zoomTick > 80) {
-        zoomTick = now
-        zoomK.value = transform.k
-        updateLabels()
-      }
-    })
-    .on('end', () => snapBack())
-  d3.select(svg.value).call(zoom)
 
-  // ResizeObserver: update extents & labels (no auto-fit to avoid loops)
+function ensureZoom () {
+  if (zoomInited) return
+  if (!svg.value || !viewportEl.value) return
+
+  // Helper: keep zoom extents in sync with container size + world bounds
+  const updateZoomExtents = () => {
+    const r = getContainerRect()
+    if (!r) return
+
+    // extent = screen-space (px) box the zoom uses as its viewport
+    zoom.extent([[0, 0], [r.width, r.height]])
+
+    // translateExtent = world-space bounds (your viewBox / map units)
+    // This prevents panning outside WORLD without custom snap/clamp fights.
+    zoom.translateExtent([[WORLD.x0, WORLD.y0], [WORLD.x1, WORLD.y1]])
+  }
+
+  // Create d3 zoom behavior with panning disabled
+  zoom = d3.zoom()
+    .scaleExtent([0.1, 50])
+    .filter((event) => {
+      // Only allow wheel events for zooming, disable all other interactions
+      if (event.type === 'wheel') return true;
+      return false;
+    })
+    .on('zoom', (event) => {
+      const { transform } = event;
+      const rect = getContainerRect();
+      
+      if (!rect) return;
+      
+      // Calculate center of the container
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      
+      // Create a transform that only applies zoom (keeps the center fixed)
+      const newTransform = d3.zoomIdentity
+        .translate(centerX, centerY)
+        .scale(transform.k)
+        .translate(-centerX / transform.k, -centerY / transform.k);
+      
+      // Apply the transform to the viewport
+      d3.select(viewportEl.value).attr('transform', newTransform);
+      
+      // Update UI state
+      zoomK.value = transform.k;
+      updateLabels();
+    })
+
+  // Get container dimensions
+  const containerRect = getContainerRect();
+  
+  // Apply zoom to SVG with proper constraints
+  const zoomSelection = d3.select(svg.value)
+    .call(zoom)
+    .on('dblclick.zoom', null); // redundant with filter, but harmless
+    
+  // Only apply initial transform if we have container dimensions
+  if (containerRect) {
+    // Store the initial transform
+    const initialTransform = d3.zoomIdentity
+      .translate(containerRect.width / 2, containerRect.height / 2)
+      .scale(0.5);
+    
+    // Apply the initial transform
+    zoomSelection.call(zoom.transform, initialTransform);
+    
+    // Also apply it directly to the viewport to prevent any flicker
+    d3.select(viewportEl.value).attr('transform', initialTransform);
+  }
+
+  // Handle wheel events for smooth zooming centered on the viewport
+  if (mapAreaEl.value) {
+    mapAreaEl.value.addEventListener(
+      'wheel',
+      (e) => {
+        // Only prevent default if not holding ctrl (to allow page zoom with ctrl+wheel)
+        if (!e.ctrlKey) {
+          e.preventDefault();
+          
+          // Calculate zoom factor based on wheel delta
+          const delta = -e.deltaY * (e.deltaMode === 1 ? 0.05 : e.deltaMode ? 1 : 0.002);
+          const zoomFactor = Math.exp(delta);
+          
+          // Get current transform
+          const t = d3.zoomTransform(svg.value);
+          
+          // Calculate new scale with bounds checking
+          const newK = Math.max(0.1, Math.min(50, t.k * zoomFactor));
+          
+          // Only update if scale changed
+          if (newK !== t.k) {
+            // Get container dimensions
+            const rect = getContainerRect();
+            if (!rect) return;
+            
+            // Calculate center of the container
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            
+            // Create a new transform that keeps the center point fixed
+            const newTransform = d3.zoomIdentity
+              .translate(centerX, centerY)
+              .scale(newK)
+              .translate(-centerX / newK, -centerY / newK);
+            
+            // Apply the new transform
+            d3.select(svg.value).call(zoom.transform, newTransform);
+          }
+        }
+      },
+      { passive: false }
+    );
+  }
+
+  // ResizeObserver: update extents & labels on size change
   roMap = new ResizeObserver(async () => {
     await raf2()
-    d3.select(svg.value).call(zoom.extent(() => {
-      const r = getContainerRect()
-      return r ? [[0, 0], [r.width, r.height]] : [[0, 0], [1000, 1000]]
-    }))
+    updateZoomExtents()
     updateLabels()
   })
+
   if (mapAreaEl.value) roMap.observe(mapAreaEl.value)
+
+  // Initialize extents once
+  updateZoomExtents()
+  updateLabels()
 
   zoomInited = true
 }
+
 
 /* CSV download */
 function downloadCsv() {
@@ -668,43 +1153,259 @@ function downloadCsv() {
 }
 
 /* lifecycle */
-onMounted(loadAll)
-onBeforeUnmount(() => { if (roMap && mapAreaEl.value) roMap.unobserve(mapAreaEl.value) })
+// Add resetViewNoAnimation function
+function resetViewNoAnimation() {
+  const rect = getContainerRect()
+  if (!rect) return
+  
+  // Calculate the scale to fit the world view
+  const worldWidth = WORLD.x1 - WORLD.x0
+  const worldHeight = WORLD.y1 - WORLD.y0
+  const scaleX = rect.width / (worldWidth * 1.1)
+  const scaleY = rect.height / (worldHeight * 1.1)
+  const scale = Math.min(scaleX, scaleY, 1)
+  
+  // Center the view
+  const tx = (rect.width - worldWidth * scale) / 2 - WORLD.x0 * scale
+  const ty = (rect.height - worldHeight * scale) / 2 - WORLD.y0 * scale
+  
+  // Apply transform immediately without animation
+  suppressSnap = true
+  const transform = d3.zoomIdentity
+    .translate(tx, ty)
+    .scale(scale)
+  
+  d3.select(svg.value)
+    .call(zoom.transform, transform)
+  
+  // Update labels immediately
+  updateLabels()
+  suppressSnap = false
+}
+
+onMounted(async () => {
+  try {
+    console.log('Component mounted, initializing...');
+    
+    // First, ensure the container is properly sized
+    await nextTick();
+    console.log('Container should be ready');
+    
+    // Initialize zoom first to set up the behavior
+    ensureZoom();
+    console.log('Zoom behavior initialized');
+    
+    // Load data
+    console.log('Loading data...');
+    const loadSuccess = await loadAll();
+    console.log('Data loaded, success:', loadSuccess);
+    
+    await nextTick();
+    console.log('Villages after load:', villages.value);
+    
+    if (villages.value.length > 0) {
+      // Draw markers
+      console.log('Drawing markers...');
+      drawMarkers();
+      
+      // Set initial zoom level (centered at 0,0)
+      console.log('Setting initial zoom level');
+      const scale = 0.5;
+      
+      // Apply the transform through D3 zoom to ensure consistency
+      const transform = d3.zoomIdentity
+        .translate(0, 0) // Keep centered at origin
+        .scale(scale);
+      
+      d3.select(svg.value)
+        .call(zoom.transform, transform);
+      
+      // Update labels
+      updateLabels();
+    }
+  } catch (error) {
+    console.error('Error during initialization:', error)
+  }
+})
+
+onBeforeUnmount(() => { 
+  if (roMap && mapAreaEl.value) roMap.unobserve(mapAreaEl.value) 
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>
 
 <style scoped>
-.player-detail-page { background: #0d0d0d; }
-.content-wrap       { max-width: 1400px; margin: 0 auto; }
+.player-detail-page {
+  min-height: 100%;
+  background-color: #f5f5f5;
+}
 
-.map-card { background: #0d0d0d; }
-.map-area {
+.content-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.map-card {
+  flex: 0 0 auto;
+  height: 60vh;
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
   position: relative;
-  height: 360px;
-  min-height: 240px;
-  background: #000;
-  border-top: 1px solid #1f1f1f;
-}
-.map-area > .map-svg {
-  position: absolute; inset: 0; width: 100%; height: 100%; background: #000;
-  will-change: transform;
 }
 
-/* Markers: exact 1×1, crisp */
-.map-area :deep(#markersLayer .marker) {
-  vector-effect: non-scaling-stroke;
-  image-rendering: pixelated;
+.map-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #1a1a1a;
 }
 
-/* Labels */
-.coord-label { fill: #bbb; font-size: 11px; user-select: none; pointer-events: none; }
+.map-svg {
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
 
-/* Tooltip */
+.coord-label {
+  fill: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  font-family: monospace;
+  pointer-events: none;
+  user-select: none;
+  text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 2px #000;
+}
+
 .tooltip {
-  position: fixed; pointer-events: none; background: rgba(0,0,0,0.9); color: #fff;
-  padding: 6px 8px; border-radius: 4px; font-size: .8rem; white-space: nowrap; z-index: 1000;
-  border: 1px solid rgba(255,255,255,0.08);
+  position: absolute;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 0.5rem;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 1000;
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 240px;
 }
 
-/* Statusbar */
-.statusbar { height: 28px; border-top: 1px solid #1f1f1f; background: #0d0d0d; color: #ddd; }
+.marker {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  pointer-events: all;
+  
+  &.highlighted {
+    stroke: #ffeb3b !important;
+    stroke-width: 0.2 !important;
+    filter: drop-shadow(0 0 3px rgba(255, 235, 59, 0.8));
+    animation: pulse 1.5s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { filter: drop-shadow(0 0 2px rgba(255, 235, 59, 0.8)); }
+    50% { filter: drop-shadow(0 0 5px rgba(255, 235, 59, 1)); }
+    100% { filter: drop-shadow(0 0 2px rgba(255, 235, 59, 0.8)); }
+  }
+}
+
+.statusbar {
+  background: #f0f0f0;
+  border-top: 1px solid #e0e0e0;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+/* Context Menu Styles */
+.context-menu {
+  z-index: 7000;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.context-menu :deep(.q-item) {
+  min-height: 36px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+}
+
+.context-menu :deep(.q-item__section--avatar) {
+  min-width: 32px;
+  color: #1976d2;
+}
+
+.context-menu :deep(.q-item__label) {
+  font-size: 0.9em;
+  font-weight: 500;
+  color: #333;
+}
+
+.context-menu :deep(.q-item.q-item--clickable:hover) {
+  background: #f0f7ff;
+}
+
+.context-menu :deep(.q-item.q-item--active) {
+  color: #1976d2;
+  background: #e3f2fd;
+}
+
+.context-menu :deep(.q-item.q-item--dense) {
+  min-height: 32px;
+  padding: 4px 16px;
+}
+
+.context-menu :deep(.q-item__label--header) {
+  color: #666;
+  font-weight: 600;
+  font-size: 0.8em;
+  padding: 8px 16px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.context-menu :deep(.q-separator) {
+  margin: 4px 0;
+}
+
+:deep(.q-table) {
+  table-layout: fixed;
+}
+
+:deep(.q-table th) {
+  font-weight: 600;
+  background: #f5f5f5;
+}
+
+:deep(.q-table tbody tr) {
+  cursor: pointer;
+}
+
+:deep(.q-table tbody tr:hover) {
+  background: #f0f7ff;
+}
+
+:deep(.q-table td) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:deep(.q-table th:first-child),
+:deep(.q-table td:first-child) {
+  padding-left: 16px;
+}
+
+:deep(.q-table th:last-child),
+:deep(.q-table td:last-child) {
+  padding-right: 16px;
+}
+
+:deep(.q-table--dense .q-table th),
+:deep(.q-table--dense .q-table td) {
+  padding: 4px 8px;
+}
 </style>
