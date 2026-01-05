@@ -81,11 +81,12 @@
             </q-btn>
           </div>
 
-          <div class="svg-container" @contextmenu.capture="onContextMenu">
+          <div class="svg-container">
             <svg
               ref="svg"
               id="svgMap"
               preserveAspectRatio="xMidYMid meet"
+              @contextmenu.prevent="onContextMenu"
               @mouseleave="hideTooltip"
               @pointerdown="onPointerDown"
               @pointermove="onPointerMove"
@@ -147,12 +148,46 @@
               </g>
             </svg>
 
-            <q-menu context-menu>
-              <q-list style="min-width: 220px">
-                <q-item-label header>Actions</q-item-label>
-                <q-item clickable :disable="!ctx.hasMarker" @click="centerOnContext" v-close-popup>
+            <!-- Enhanced Context Menu -->
+            <q-menu
+              v-model="showContextMenu"
+              context-menu
+              touch-position
+              @before-show="onBeforeContextMenuShow"
+              @hide="onContextMenuHide"
+              :style="{ left: `${contextPosition.x}px`, top: `${contextPosition.y}px` }"
+              class="context-menu"
+            >
+              <q-list>
+                <q-item-label header>Village Actions</q-item-label>
+
+                <q-item clickable v-close-popup @click="centerOnContext" :disable="!ctx.hasMarker">
                   <q-item-section avatar><q-icon name="center_focus_strong" /></q-item-section>
-                  <q-item-section>Center map on this village</q-item-section>
+                  <q-item-section>Center on village</q-item-section>
+                </q-item>
+
+                <q-item clickable v-close-popup @click="copyCoordinates">
+                  <q-item-section avatar><q-icon name="content_copy" /></q-item-section>
+                  <q-item-section>Copy coordinates</q-item-section>
+                </q-item>
+
+                <q-item clickable v-close-popup :href="getTravianMapLink" target="_blank">
+                  <q-item-section avatar><q-icon name="open_in_new" /></q-item-section>
+                  <q-item-section>Open in Travian Map</q-item-section>
+                </q-item>
+
+                <q-separator />
+
+                <q-item-label header>Map Controls</q-item-label>
+
+                <q-item clickable v-close-popup @click="fitToContent">
+                  <q-item-section avatar><q-icon name="zoom_out_map" /></q-item-section>
+                  <q-item-section>Fit to villages</q-item-section>
+                </q-item>
+
+                <q-item clickable v-close-popup @click="resetView">
+                  <q-item-section avatar><q-icon name="refresh" /></q-item-section>
+                  <q-item-section>Reset view</q-item-section>
                 </q-item>
               </q-list>
             </q-menu>
@@ -205,11 +240,12 @@
         </q-btn>
       </div>
 
-      <div class="svg-container" @contextmenu.capture="onContextMenu">
+      <div class="svg-container">
         <svg
           ref="svg"
           id="svgMap"
           preserveAspectRatio="xMidYMid meet"
+          @contextmenu.prevent="onContextMenu"
           @mouseleave="hideTooltip"
           @pointerdown="onPointerDown"
           @pointermove="onPointerMove"
@@ -391,6 +427,41 @@
         </q-card-section>
       </q-card>
     </q-dialog>
+
+    <!-- Context Menu -->
+    <q-menu
+      v-model="showContextMenu"
+      context-menu
+      touch-position
+      :style="{ left: `${contextPosition.x}px`, top: `${contextPosition.y}px` }"
+      class="context-menu"
+      @before-show="onBeforeContextMenuShow"
+      @hide="onContextMenuHide"
+    >
+      <q-list>
+        <q-item clickable v-close-popup @click="centerOnContext" :disable="!ctx.hasMarker">
+          <q-item-section avatar><q-icon name="center_focus_strong" /></q-item-section>
+          <q-item-section>Center on village</q-item-section>
+        </q-item>
+
+        <q-item clickable v-close-popup @click="copyCoordinates">
+          <q-item-section avatar><q-icon name="content_copy" /></q-item-section>
+          <q-item-section>Copy coordinates</q-item-section>
+        </q-item>
+
+        <q-item clickable v-close-popup :href="getTravianMapLink" target="_blank">
+          <q-item-section avatar><q-icon name="open_in_new" /></q-item-section>
+          <q-item-section>Open in Travian Map</q-item-section>
+        </q-item>
+
+        <q-separator />
+
+        <q-item clickable v-close-popup @click="resetView">
+          <q-item-section avatar><q-icon name="refresh" /></q-item-section>
+          <q-item-section>Reset view</q-item-section>
+        </q-item>
+      </q-list>
+    </q-menu>
   </q-page>
 </template>
 
@@ -445,8 +516,37 @@ let initialFitted = false;
 /** Tooltip */
 const tooltip = ref({ show: false, x: 0, y: 0, content: '' });
 
-/** Context menu state */
-const ctx = ref({ hasMarker: false, point: null });
+/* === Context Menu === */
+const showContextMenu = ref(false);
+const contextPosition = ref({ x: 0, y: 0 });
+const ctx = reactive({
+  point: null,
+  hasMarker: false,
+  marker: null
+});
+
+function onBeforeContextMenuShow() {
+  document.addEventListener('click', handleClickOutside);
+}
+
+function onContextMenuHide() {
+  document.removeEventListener('click', handleClickOutside);
+}
+
+function handleClickOutside(event) {
+  if (showContextMenu.value && !event.target.closest('.q-menu')) {
+    showContextMenu.value = false;
+  }
+}
+
+
+
+const getTravianMapLink = computed(() => {
+  if (!ctx.point) return '#';
+  const x = Math.round(ctx.point.x);
+  const y = Math.round(-ctx.point.y);
+  return `https://${$q.cookies.get('server') || 'ts1.x1.europe'}.travian.com/karte.php?x=${x}&y=${y}`;
+});
 
 /** Player dialog */
 const profileDialog = ref(false);
@@ -854,6 +954,156 @@ const handleResize = () => {
 
 
 
+
+function onContextMenu(e) {
+  e.preventDefault();
+  const el = e.target.closest('.marker');
+  ctx.hasMarker = !!el;
+  ctx.marker = el;
+  
+  if (el) {
+    const bb = el.getBBox();
+    ctx.point = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
+  } else {
+    const rect = svg.value.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const transform = d3.zoomTransform(svg.value);
+    ctx.point = {
+      x: (x - transform.x) / transform.k,
+      y: (y - transform.y) / transform.k
+    };
+  }
+  
+  // Set context menu position and show it
+  contextPosition.value = { x: e.clientX, y: e.clientY };
+  showContextMenu.value = true;
+  
+  // Prevent any zoom behavior
+  if (e.type === 'dblclick') {
+    e.stopPropagation();
+    return false;
+  }
+  
+  return false;
+}
+
+
+
+function copyCoordinates() {
+if (!ctx.point) return;
+const x = Math.round(ctx.point.x);
+const y = Math.round(ctx.point.y);
+const coordText = `${x}|${y}`;
+navigator.clipboard.writeText(coordText).then(() => {
+$q.notify({
+message: 'Coordinates copied to clipboard!',
+color: 'positive',
+position: 'top',
+timeout: 1000
+});
+});
+}
+
+const startMeasuring = () => {
+if (!ctx.point) return;
+drawMode.value = 'measure';
+const point = ctx.point;
+
+// Clear any existing preview
+previewLayer.value.innerHTML = '';
+
+// Create a preview line
+const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+line.setAttribute('x1', point.x);
+line.setAttribute('y1', point.y);
+line.setAttribute('x2', point.x);
+line.setAttribute('y2', point.y);
+line.setAttribute('stroke', 'red');
+line.setAttribute('stroke-width', '0.1');
+line.setAttribute('stroke-dasharray', '0.2,0.2');
+
+previewLayer.value.appendChild(line);
+
+// Update the preview on mouse move
+const onMouseMove = (e) => {
+const pt = toMapCoords(e);
+line.setAttribute('x2', pt.x);
+line.setAttribute('y2', pt.y);
+};
+
+// Clean up on next click
+const onClick = (e) => {
+svg.value.removeEventListener('mousemove', onMouseMove);
+svg.value.removeEventListener('click', onClick);
+previewLayer.value.removeChild(line);
+drawMode.value = null;
+};
+
+svg.value.addEventListener('mousemove', onMouseMove);
+svg.value.addEventListener('click', onClick, { once: true });
+};
+
+const addMarkerAtPoint = () => {
+if (!ctx.point) return;
+
+// You can customize this to show a dialog for marker details
+$q.dialog({
+title: 'Add Marker',
+message: 'Enter marker name:',
+prompt: {
+model: '',
+type: 'text',
+isValid: val => val.length > 0,
+label: 'Marker name',
+hint: 'Enter a name for this marker'
+},
+cancel: true,
+persistent: true
+}).onOk(name => {
+// Here you would typically add the marker to your markers array
+// and save it to your backend or local storage
+$q.notify({
+message: `Marker "${name}" added at (${Math.round(ctx.point.x)}|${Math.round(ctx.point.y)})`,
+color: 'positive',
+position: 'top',
+timeout: 2000
+});
+
+// TODO: Add the actual marker to your markers array and save it
+// This is a placeholder for the actual implementation
+});
+};
+
+const showVillageInfo = () => {
+if (!ctx.hasMarker || !ctx.marker) return;
+
+// Extract village info from the marker
+const villageInfo = {
+name: ctx.marker.getAttribute('data-name') || 'Unknown Village',
+x: Math.round(parseFloat(ctx.marker.getAttribute('data-x'))),
+y: Math.round(parseFloat(ctx.marker.getAttribute('data-y'))),
+// Add more info as needed from your marker data attributes
+};
+
+$q.dialog({
+title: 'Village Information',
+message: `
+<div class="text-h6">${villageInfo.name}</div>
+<div>Coordinates: ${villageInfo.x}|${villageInfo.y}</div>
+<div>Player: ${ctx.marker.getAttribute('data-player') || 'Unknown'}</div>
+<div>Alliance: ${ctx.marker.getAttribute('data-alliance') || 'None'}</div>
+`,
+html: true,
+style: 'min-width: 300px;',
+ok: {
+label: 'Close',
+flat: true
+},
+cancel: false
+});
+};
+
 /* === Pointer handlers === */
 let previewElem = null;
 let anchor = null;
@@ -1044,18 +1294,6 @@ function onKeydown(evt) {
 }
 
 
-function onContextMenu(evt) {
-  // Runs before QMenu shows (capture phase)
-  const el = evt.target.closest('.marker');
-  ctx.value.hasMarker = !!el;
-  if (el) {
-    // Center of marker bbox in map coords
-    const bb = el.getBBox();
-    ctx.value.point = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
-  } else {
-    ctx.value.point = toMapCoords(evt);
-  }
-}
 
 function centerOnContext() {
   if (!ctx.value?.point) return;
