@@ -209,7 +209,7 @@ onMounted(loadStats)
     left: 0;
     right: 0;
     bottom: 0;
-    background: url('/background.png') center/cover no-repeat;
+   // background: url('/background.png') center/cover no-repeat;
     opacity: 0.2;
   }
 }

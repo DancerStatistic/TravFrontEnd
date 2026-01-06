@@ -410,20 +410,31 @@
         </q-card>
       </div>
     </div>
+    
+    <!-- Player History Charts -->
+    <div class="q-mt-md" v-if="playerHistory.length > 0">
+      <PlayerHistoryCharts 
+        :player-name="playerName" 
+        :history-data="playerHistory"
+      />
+    </div>
   </q-page>
 </template>
 
 
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
+import { useQuasar } from 'quasar'
+import PlayerHistoryCharts from 'src/components/PlayerHistoryCharts.vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import * as d3 from 'd3'
 import { api } from 'boot/axios'
 import bgUrl from 'assets/background.png'
 
 /* routing */
-const route   = useRoute()
-const router  = useRouter()
+const $q = useQuasar()
+const route = useRoute()
+const router = useRouter()
 const playerName = ref(route.params.name)
 watch(() => route.params.name, async (n) => {
   playerName.value = n
@@ -887,7 +898,8 @@ function drawMarkers() {
 }
 
 /* data loading */
-const error   = ref(null)
+const error = ref(null)
+const playerHistory = ref([])
 function resetState() {
   error.value = null
   villages.value = []
@@ -896,6 +908,53 @@ function resetState() {
 }
 
 const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+
+function debugHistoryData(history) {
+  console.group('Player History Debug')
+  console.log('History data received:', history)
+  
+  if (history.length === 0) {
+    console.warn('No history data available')
+  } else {
+    console.log(`Found ${history.length} days of data`)
+    
+    // Log first and last entry
+    console.log('First entry:', history[0])
+    if (history.length > 1) {
+      console.log('Last entry:', history[history.length - 1])
+    }
+    
+    // Check for required fields
+    const sample = history[0]
+    const requiredFields = ['date', 'population', 'villages']
+    const missingFields = requiredFields.filter(field => !(field in sample))
+    
+    if (missingFields.length > 0) {
+      console.error('Missing required fields:', missingFields)
+    }
+    
+    // Check date range
+    const dates = history.map(h => h.date).sort()
+    console.log('Date range:', dates[0], 'to', dates[dates.length - 1])
+  }
+  
+  console.groupEnd()
+}
+
+async function loadPlayerHistory() {
+  try {
+    const response = await api.get(`/api/player/${encodeURIComponent(playerName.value)}/history`)
+    playerHistory.value = response.data.history || []
+    debugHistoryData(playerHistory.value)
+  } catch (err) {
+    console.error('Error loading player history:', err)
+    $q.notify({
+      type: 'negative',
+      message: 'Failed to load player history',
+      timeout: 3000
+    })
+  }
+}
 
 async function loadAll() {
   console.log('loadAll called for player:', playerName.value);
@@ -906,6 +965,9 @@ async function loadAll() {
     console.error('No player name provided');
     return false;
   }
+  
+  // Load player history
+  await loadPlayerHistory()
 
   try {
     let playerTribe = null
@@ -1186,6 +1248,7 @@ function resetViewNoAnimation() {
 onMounted(async () => {
   try {
     console.log('Component mounted, initializing...');
+    console.log('Player name:', playerName.value);
     
     // First, ensure the container is properly sized
     await nextTick();

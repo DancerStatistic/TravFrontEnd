@@ -1918,70 +1918,160 @@ def api_player_villages(player_name):
 @api_error_handler
 def api_player_history(player_name: str):
     """
-    Return time-series for a player's total villages & population per dump_date.
-    If Supabase is unreachable or errors, degrade gracefully without touching the network.
+    Return time-series for a player's statistics including growth rates and tribe distribution.
     
     Args:
         player_name: Name of the player
         
     Returns:
-        JSON response with historical data (villages and population over time)
+        JSON response with historical data including:
+        - villages and population over time
+        - growth rates
+        - tribe distribution over time
     """
     start_time = time.time()
     player_name = validate_string_param(player_name, 'player_name')
-    # Try Supabase only if reachable
+    cache_key = f"player_history:{player_name}"
+    
+    # Try Redis cache first
+    cached_data = cache_get_json(cache_key)
+    if cached_data:
+        metrics.record_redis_hit()
+        duration = time.time() - start_time
+        metrics.record_request('/api/player/<player_name>/history', duration)
+        return jsonify(success_response(cached_data, "Player history (cached)")[0])
+    
+    metrics.record_redis_miss()
+    
+    history = []
+    player_ranks = {}
+    
+    # Try Supabase first
     if supabase_reachable(1.0):
         try:
+            # Get all historical data for this player
             resp = (supabase.table("villages")
-                            .select("dump_date,population,player_name")
-                            .ilike("player_name", player_name)
-                            .execute())
-            vs = resp.data or []
-            stats: Dict[str, Dict[str, int]] = {}
-            for r in vs:
-                d = r["dump_date"]
-                stats.setdefault(d, {"villages": 0, "population": 0})
-                stats[d]["villages"] += 1
-                stats[d]["population"] += int(r.get("population") or 0)
-            history = [{"date": d,
-                        "villages": stats[d]["villages"],
-                        "population": stats[d]["population"]}
-                       for d in sorted(stats)]
-            duration = time.time() - start_time
-            metrics.record_request('/api/player/<player_name>/history', duration)
-            return jsonify(success_response({
-                'player': player_name,
-                'history': history
-            }, "Player history retrieved successfully")[0])
+                           .select("dump_date,population,player_name,player_id,tribe")
+                           .ilike("player_name", player_name)
+                           .order("dump_date")
+                           .execute())
+            
+            # Group by date and calculate stats
+            stats_by_date = {}
+            for r in resp.data or []:
+                date = r["dump_date"]
+                if date not in stats_by_date:
+                    stats_by_date[date] = {
+                        "villages": 0,
+                        "population": 0,
+                        "tribes": defaultdict(int)
+                    }
+                
+                stats = stats_by_date[date]
+                stats["villages"] += 1
+                stats["population"] += int(r.get("population") or 0)
+                if "tribe" in r and r["tribe"]:
+                    stats["tribes"][r["tribe"]] += 1
+            
+            # Convert to sorted list and calculate growth rates
+            prev_pop = None
+            prev_villages = None
+            for date in sorted(stats_by_date.keys()):
+                stats = stats_by_date[date]
+                entry = {
+                    "date": date,
+                    "villages": stats["villages"],
+                    "population": stats["population"],
+                    "tribes": dict(stats["tribes"]),
+                    "village_growth": 0,
+                    "pop_growth": 0,
+                    "pop_growth_rate": 0,
+                    "village_growth_rate": 0
+                }
+                
+                # Calculate growth from previous day
+                if prev_pop is not None:
+                    entry["pop_growth"] = entry["population"] - prev_pop
+                    entry["village_growth"] = entry["villages"] - prev_villages
+                    entry["pop_growth_rate"] = (entry["pop_growth"] / prev_pop * 100) if prev_pop > 0 else 0
+                    entry["village_growth_rate"] = (entry["village_growth"] / prev_villages * 100) if prev_villages > 0 else 0
+                
+                prev_pop = entry["population"]
+                prev_villages = entry["villages"]
+                history.append(entry)
+            
+            # Get rank history if available
+            try:
+                rank_resp = (supabase.table("player_ranks")
+                                 .select("*")
+                                 .ilike("player_name", player_name)
+                                 .order("dump_date")
+                                 .execute())
+                
+                for rank_data in rank_resp.data or []:
+                    player_ranks[rank_data["dump_date"]] = {
+                        "rank": rank_data.get("rank"),
+                        "score": rank_data.get("score")
+                    }
+            except Exception as rank_err:
+                logger.warning(f"Could not fetch rank history: {rank_err}")
+            
         except Exception as e:
-            logger.error("Supabase history lookup failed for %s: %s", player_name, e)
+            logger.error(f"Supabase history lookup failed for {player_name}: {e}")
+            history = get_fallback_history(player_name)
+    else:
+        history = get_fallback_history(player_name)
+    
+    # Enrich with rank data
+    for entry in history:
+        rank_data = player_ranks.get(entry["date"], {})
+        entry["rank"] = rank_data.get("rank")
+        entry["score"] = rank_data.get("score")
+    
+    # Cache the result (1 hour TTL)
+    response_data = {
+        'player': player_name,
+        'history': history
+    }
+    cache_set_json(cache_key, response_data, ttl=3600)
+    
+    duration = time.time() - start_time
+    metrics.record_request('/api/player/<player_name>/history', duration)
+    
+    return jsonify(success_response(
+        response_data,
+        "Player history retrieved successfully"
+    )[0])
 
-    # ⬇️ LOCAL, non-network fallback — use in-memory caches only
+def get_fallback_history(player_name: str) -> List[Dict]:
+    """Fallback history when Supabase is not available"""
     player_lower = player_name.lower()
     rows: List[Dict[str, Any]] = []
-
+    
     if _cached_rows:
         rows = _cached_rows
     elif _cached_sql:
         rows = [sql_row_to_dict(r) for r in _cached_sql]
     else:
-        # last resort; may try network but has short timeout & cache
         rows = [sql_row_to_dict(r) for r in fetch_sql_data()]
-
+    
     rows = [r for r in rows if (r.get("player_name") or "").lower() == player_lower]
-    if rows:
-        total_pop = sum(int(r.get("population") or 0) for r in rows)
-        today = date.today().isoformat()
-        history = [{"date": today, "villages": len(rows), "population": total_pop}]
-    else:
-        history = []
-
-    duration = time.time() - start_time
-    metrics.record_request('/api/player/<player_name>/history', duration)
-    return jsonify(success_response({
-        'player': player_name,
-        'history': history
-    }, "Player history retrieved successfully")[0])
+    if not rows:
+        return []
+    
+    today = date.today().isoformat()
+    total_pop = sum(int(r.get("population") or 0) for r in rows)
+    
+    return [{
+        "date": today,
+        "villages": len(rows),
+        "population": total_pop,
+        "tribes": {},
+        "village_growth": 0,
+        "pop_growth": 0,
+        "pop_growth_rate": 0,
+        "village_growth_rate": 0
+    }]
 
 
 @app.route("/api/players")
