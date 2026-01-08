@@ -970,7 +970,10 @@ function debugHistoryData(history) {
 
 async function loadPlayerHistory () {
   try {
-    const response = await api.get(`/api/player/${encodeURIComponent(playerName.value)}/history`)
+    const response = await api.get(
+      `/api/player/${encodeURIComponent(playerName.value)}/history`,
+      { params: { no_cache: 1 } } // optional; see backend note below
+    )
 
     const history =
       response?.data?.data?.history ??
@@ -978,14 +981,17 @@ async function loadPlayerHistory () {
       []
 
     playerHistory.value = Array.isArray(history) ? history : []
+    debugHistoryData(playerHistory.value)
   } catch (err) {
     console.error('Error loading player history:', err)
     playerHistory.value = []
-    notifyError('Could not load player history.')
+    $q.notify({
+      type: 'negative',
+      message: 'Failed to load player history',
+      timeout: 3000
+    })
   }
 }
-
-
 
 
 

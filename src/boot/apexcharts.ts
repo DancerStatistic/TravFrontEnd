@@ -3,5 +3,5 @@ import VueApexCharts from 'vue3-apexcharts'
 
 export default boot(({ app }) => {
   // vue3-apexcharts registers the component via app.component
-  app.component('apexchart', VueApexCharts)
+  app.use(VueApexCharts)
 })

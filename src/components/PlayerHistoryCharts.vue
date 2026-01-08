@@ -86,7 +86,6 @@ import { api } from 'boot/axios'
 import VueApexCharts from 'vue3-apexcharts'
 export default {
   name: 'PlayerHistoryCharts',
-  name: 'PlayerHistoryCharts',
   components: {
      apexchart: VueApexCharts
    },
