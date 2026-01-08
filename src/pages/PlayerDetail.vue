@@ -128,19 +128,36 @@
           </q-card>
         </div>
 
-        <!-- Right Column: Map -->
+        <!-- Right Column: Map & Charts Tabs -->
         <div class="col-12 col-md-8">
           <q-card flat bordered class="map-card">
-            <q-card-section class="row items-center q-gutter-sm">
-              <div class="text-subtitle2">Villages Map</div>
-              <q-space />
-              <q-btn flat dense icon="center_focus_strong" @click="fitToContent">
-                <q-tooltip>Fit to player villages</q-tooltip>
-              </q-btn>
-              <q-btn flat dense icon="refresh" @click="resetView">
-                <q-tooltip>Reset view</q-tooltip>
-              </q-btn>
-            </q-card-section>
+            <!-- Tabs -->
+            <q-tabs
+              v-model="activeTab"
+              dense
+              class="text-grey"
+              active-color="primary"
+              indicator-color="primary"
+              align="left"
+            >
+              <q-tab name="map" label="Villages Map" icon="map" />
+              <q-tab name="charts" label="Charts" icon="show_chart" />
+            </q-tabs>
+
+            <q-separator />
+
+            <q-tab-panels v-model="activeTab" animated class="tab-panels-container">
+              <!-- Villages Map Tab -->
+              <q-tab-panel name="map" class="q-pa-none map-tab-panel">
+                <div class="map-controls q-pa-sm row items-center q-gutter-sm">
+                  <q-space />
+                  <q-btn flat dense icon="center_focus_strong" @click="fitToContent">
+                    <q-tooltip>Fit to player villages</q-tooltip>
+                  </q-btn>
+                  <q-btn flat dense icon="refresh" @click="resetView">
+                    <q-tooltip>Reset view</q-tooltip>
+                  </q-btn>
+                </div>
 
             <div
               class="map-area"
@@ -288,49 +305,64 @@
               </div>
             </div>
 
-            <!-- Enhanced Context Menu -->
-            <q-menu
-              v-model="showContextMenu"
-              context-menu
-              touch-position
-              @before-show="onBeforeContextMenuShow"
-              @hide="onContextMenuHide"
-              :style="{ left: `${contextPosition.x}px`, top: `${contextPosition.y}px` }"
-              class="context-menu"
-            >
-              <q-list>
-                <q-item-label header>Village Actions</q-item-label>
+                <!-- Enhanced Context Menu -->
+                <q-menu
+                  v-model="showContextMenu"
+                  context-menu
+                  touch-position
+                  @before-show="onBeforeContextMenuShow"
+                  @hide="onContextMenuHide"
+                  :style="{ left: `${contextPosition.x}px`, top: `${contextPosition.y}px` }"
+                  class="context-menu"
+                >
+                  <q-list>
+                    <q-item-label header>Village Actions</q-item-label>
 
-                <q-item clickable v-close-popup @click="centerOnContext" :disable="!ctx.hasMarker">
-                  <q-item-section avatar><q-icon name="center_focus_strong" /></q-item-section>
-                  <q-item-section>Center on village</q-item-section>
-                </q-item>
+                    <q-item clickable v-close-popup @click="centerOnContext" :disable="!ctx.hasMarker">
+                      <q-item-section avatar><q-icon name="center_focus_strong" /></q-item-section>
+                      <q-item-section>Center on village</q-item-section>
+                    </q-item>
 
-                <q-item clickable v-close-popup @click="copyCoordinates">
-                  <q-item-section avatar><q-icon name="content_copy" /></q-item-section>
-                  <q-item-section>Copy coordinates</q-item-section>
-                </q-item>
+                    <q-item clickable v-close-popup @click="copyCoordinates">
+                      <q-item-section avatar><q-icon name="content_copy" /></q-item-section>
+                      <q-item-section>Copy coordinates</q-item-section>
+                    </q-item>
 
-                <q-item clickable v-close-popup :href="getTravianMapLink" target="_blank">
-                  <q-item-section avatar><q-icon name="open_in_new" /></q-item-section>
-                  <q-item-section>Open in Travian Map</q-item-section>
-                </q-item>
+                    <q-item clickable v-close-popup :href="getTravianMapLink" target="_blank">
+                      <q-item-section avatar><q-icon name="open_in_new" /></q-item-section>
+                      <q-item-section>Open in Travian Map</q-item-section>
+                    </q-item>
 
-                <q-separator />
+                    <q-separator />
 
-                <q-item-label header>Map Controls</q-item-label>
+                    <q-item-label header>Map Controls</q-item-label>
 
-                <q-item clickable v-close-popup @click="fitToContent">
-                  <q-item-section avatar><q-icon name="zoom_out_map" /></q-item-section>
-                  <q-item-section>Fit to villages</q-item-section>
-                </q-item>
+                    <q-item clickable v-close-popup @click="fitToContent">
+                      <q-item-section avatar><q-icon name="zoom_out_map" /></q-item-section>
+                      <q-item-section>Fit to villages</q-item-section>
+                    </q-item>
 
-                <q-item clickable v-close-popup @click="resetView">
-                  <q-item-section avatar><q-icon name="refresh" /></q-item-section>
-                  <q-item-section>Reset view</q-item-section>
-                </q-item>
-              </q-list>
-            </q-menu>
+                    <q-item clickable v-close-popup @click="resetView">
+                      <q-item-section avatar><q-icon name="refresh" /></q-item-section>
+                      <q-item-section>Reset view</q-item-section>
+                    </q-item>
+                  </q-list>
+                </q-menu>
+              </q-tab-panel>
+
+              <!-- Charts Tab -->
+              <q-tab-panel name="charts" class="q-pa-md charts-tab-panel">
+                <PlayerHistoryCharts 
+                  v-if="playerHistory.length > 0"
+                  :player-name="playerName" 
+                  :history-data="playerHistory"
+                />
+                <div v-else class="text-center q-pa-lg text-grey-6">
+                  <q-icon name="show_chart" size="3em" class="q-mb-md" />
+                  <div>No historical data available for this player.</div>
+                </div>
+              </q-tab-panel>
+            </q-tab-panels>
           </q-card>
         </div>
       </div>
@@ -409,14 +441,6 @@
           </q-table>
         </q-card>
       </div>
-    </div>
-    
-    <!-- Player History Charts -->
-    <div class="q-mt-md" v-if="playerHistory.length > 0">
-      <PlayerHistoryCharts 
-        :player-name="playerName" 
-        :history-data="playerHistory"
-      />
     </div>
   </q-page>
 </template>
@@ -497,6 +521,7 @@ function mapTribe(t) {
 const villages   = ref([])
 const filter     = ref('')
 const pagination = ref({ page:1, rowsPerPage:10 })
+const activeTab  = ref('map')
 
 // Compute tribe distribution for the village distribution chart
 const tribeDistribution = computed(() => {
@@ -1359,6 +1384,29 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   position: relative;
+}
+
+.tab-panels-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.map-tab-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.map-controls {
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.charts-tab-panel {
+  height: 100%;
+  overflow-y: auto;
 }
 
 .map-area {

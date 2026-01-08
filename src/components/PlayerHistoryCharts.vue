@@ -1,6 +1,6 @@
 <template>
-  <div class="player-history-charts q-mt-lg">
-    <q-card flat bordered>
+  <div class="player-history-charts">
+    <q-card flat>
       <q-tabs
         v-model="activeTab"
         dense
@@ -18,12 +18,13 @@
 
       <q-separator />
 
-      <q-tab-panels v-model="activeTab" animated>
+      <q-tab-panels v-model="activeTab" animated class="chart-tab-panels">
         <!-- Population Over Time -->
-        <q-tab-panel name="population" class="q-pa-none">
-          <div class="chart-container" style="height: 400px;">
+        <q-tab-panel name="population" class="q-pa-sm">
+          <div class="chart-container">
             <apexchart
               type="area"
+              height="350"
               :options="populationChartOptions"
               :series="populationSeries"
             />
@@ -31,10 +32,11 @@
         </q-tab-panel>
 
         <!-- Villages Over Time -->
-        <q-tab-panel name="villages" class="q-pa-none">
-          <div class="chart-container" style="height: 400px;">
+        <q-tab-panel name="villages" class="q-pa-sm">
+          <div class="chart-container">
             <apexchart
               type="line"
+              height="350"
               :options="villageChartOptions"
               :series="villageSeries"
             />
@@ -42,10 +44,11 @@
         </q-tab-panel>
 
         <!-- Growth Rates -->
-        <q-tab-panel name="growth" class="q-pa-none">
-          <div class="chart-container" style="height: 400px;">
+        <q-tab-panel name="growth" class="q-pa-sm">
+          <div class="chart-container">
             <apexchart
               type="bar"
+              height="350"
               :options="growthChartOptions"
               :series="growthSeries"
             />
@@ -53,10 +56,11 @@
         </q-tab-panel>
 
         <!-- Rank History -->
-        <q-tab-panel name="ranks" class="q-pa-none">
-          <div class="chart-container" style="height: 400px;">
+        <q-tab-panel name="ranks" class="q-pa-sm">
+          <div class="chart-container">
             <apexchart
               type="line"
+              height="350"
               :options="rankChartOptions"
               :series="rankSeries"
             />
@@ -64,10 +68,11 @@
         </q-tab-panel>
 
         <!-- Tribe Distribution Over Time -->
-        <q-tab-panel name="tribes" class="q-pa-none">
-          <div class="chart-container" style="height: 400px;">
+        <q-tab-panel name="tribes" class="q-pa-sm">
+          <div class="chart-container">
             <apexchart
               type="line"
+              height="350"
               :options="tribeChartOptions"
               :series="tribeSeries"
             />
@@ -330,8 +335,17 @@ export default {
 </script>
 
 <style scoped>
+.player-history-charts {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-tab-panels {
+  flex: 1;
+}
+
 .chart-container {
-  min-height: 400px;
   width: 100%;
 }
 </style>
