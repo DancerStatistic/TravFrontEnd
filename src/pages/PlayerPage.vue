@@ -229,7 +229,7 @@ const avgPopulation = computed(() => {
 async function loadPlayers() {
   loading.value = true
   try {
-    const { data } = await api.get("/api/players?limit=300")
+    const { data } = await api.get("/api/players?limit=1000")
     players.value = data
   }
   finally {

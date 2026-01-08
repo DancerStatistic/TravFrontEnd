@@ -9,7 +9,8 @@ module.exports = configure(function () {
   return {
     boot: [
       'unocss',   // make sure this is listed *before* axios
-      'axios'
+      'axios',
+      'apexcharts'
     ],
 
     build: {

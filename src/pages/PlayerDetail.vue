@@ -424,7 +424,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
-import { useQuasar } from 'quasar'
+import { useQuasar, Notify } from 'quasar'
 import PlayerHistoryCharts from 'src/components/PlayerHistoryCharts.vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import * as d3 from 'd3'
@@ -565,6 +565,32 @@ const kpis = computed(() => {
 const profileLink = computed(() =>
   playerId.value ? `https://nys.x1.europe.travian.com/profile/${playerId.value}` : '#'
 )
+
+
+function safeNotify(opts) {
+  // Works whether Notify plugin is enabled or not
+  if ($q && typeof $q.notify === 'function') {
+    $q.notify(opts)
+    return
+  }
+  console.warn('Notify unavailable:', opts?.message || opts)
+}
+
+const notifyError = (message) => {
+  // Prefer Quasar Notify plugin API
+  if (Notify?.create) {
+    Notify.create({ type: 'negative', message })
+    return
+  }
+  // Fallback if Notify plugin isn't available
+  if ($q?.notify) {
+    $q.notify({ type: 'negative', message })
+    return
+  }
+  console.warn('Notify unavailable:', message)
+}
+
+
 
 /* helpers */
 function makeMapLink(coords) {
@@ -905,6 +931,7 @@ function resetState() {
   villages.value = []
   playerId.value = null
   selection.value = null
+  playerHistory.value = []
 }
 
 const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
@@ -941,20 +968,26 @@ function debugHistoryData(history) {
   console.groupEnd()
 }
 
-async function loadPlayerHistory() {
+async function loadPlayerHistory () {
   try {
     const response = await api.get(`/api/player/${encodeURIComponent(playerName.value)}/history`)
-    playerHistory.value = response.data.history || []
-    debugHistoryData(playerHistory.value)
+
+    const history =
+      response?.data?.data?.history ??
+      response?.data?.history ??
+      []
+
+    playerHistory.value = Array.isArray(history) ? history : []
   } catch (err) {
     console.error('Error loading player history:', err)
-    $q.notify({
-      type: 'negative',
-      message: 'Failed to load player history',
-      timeout: 3000
-    })
+    playerHistory.value = []
+    notifyError('Could not load player history.')
   }
 }
+
+
+
+
 
 async function loadAll() {
   console.log('loadAll called for player:', playerName.value);

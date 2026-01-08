@@ -81,9 +81,15 @@
 <script>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useQuasar } from 'quasar'
-
+import { Notify } from 'quasar'
+import { api } from 'boot/axios'
+import VueApexCharts from 'vue3-apexcharts'
 export default {
   name: 'PlayerHistoryCharts',
+  name: 'PlayerHistoryCharts',
+  components: {
+     apexchart: VueApexCharts
+   },
   props: {
     playerName: {
       type: String,
@@ -105,11 +111,13 @@ export default {
       if (props.historyData.length === 0) {
         try {
           loading.value = true
-          const response = await $api.get(`/api/player/${encodeURIComponent(props.playerName)}/history`)
-          history.value = response.data.history || []
+          const response = await api.get(`/api/player/${encodeURIComponent(props.playerName)}/history`)
+          const payload = response.data?.data ?? response.data
+          history.value = payload?.history || []
+          playerHistory.value = history;
         } catch (error) {
           console.error('Error fetching player history:', error)
-          $q.notify({
+          Notify.create({
             type: 'negative',
             message: 'Failed to load player history'
           })
