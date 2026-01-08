@@ -1,12 +1,12 @@
 <template>
-  <q-page class="fit q-pa-none">
-    <!-- Desktop: split panel inside the page -->
+  <q-page class="map-page fit q-pa-none">
+    <!-- Desktop -->
     <q-splitter
       v-if="$q.screen.gt.sm"
       v-model="splitter"
       unit="px"
       :limits="[280, 520]"
-      class="fit"
+      class="fit map-splitter"
     >
       <template #before>
         <div class="panel">
@@ -27,21 +27,21 @@
             :snapToGrid="snapToGrid"
             :canUndo="canUndo"
             :canRedo="canRedo"
-            @update:showBackground="val => showBackground = val"
-            @update:bgOpacity="val => bgOpacity = val"
-            @update:showGrid="val => showGrid = val"
-            @update:gridOpacity="val => gridOpacity = val"
-            @update:gridSize="val => gridSize = val"
-            @update:gotoX="val => gotoX = val"
-            @update:gotoY="val => gotoY = val"
+            @update:showBackground="(val) => (showBackground = val)"
+            @update:bgOpacity="(val) => (bgOpacity = val)"
+            @update:showGrid="(val) => (showGrid = val)"
+            @update:gridOpacity="(val) => (gridOpacity = val)"
+            @update:gridSize="(val) => (gridSize = val)"
+            @update:gotoX="(val) => (gotoX = val)"
+            @update:gotoY="(val) => (gotoY = val)"
             @center-on-coords="centerOnCoords"
             @toggle-all-markers="toggleAllMarkers"
             @filter-group="filterGroup"
             @select-group="selectGroup"
-            @update:drawMode="val => drawMode = val"
-            @update:drawColor="val => drawColor = val"
-            @update:drawWidth="val => drawWidth = val"
-            @update:snapToGrid="val => snapToGrid = val"
+            @update:drawMode="(val) => (drawMode = val)"
+            @update:drawColor="(val) => (drawColor = val)"
+            @update:drawWidth="(val) => (drawWidth = val)"
+            @update:snapToGrid="(val) => (snapToGrid = val)"
             @undo="undo"
             @redo="redo"
             @clear-drawings="clearDrawings"
@@ -55,380 +55,866 @@
 
       <template #after>
         <div class="map-column">
-          <div class="map-controls">
-            <q-btn round color="primary" icon="add" @click="zoomBy(1.25)" size="sm" class="control-btn">
-              <q-tooltip>Zoom In</q-tooltip>
-            </q-btn>
-            <q-btn round color="primary" icon="remove" @click="zoomBy(0.8)" size="sm" class="control-btn">
-              <q-tooltip>Zoom Out</q-tooltip>
-            </q-btn>
-            <q-btn round color="secondary" icon="center_focus_strong" @click="resetView" size="sm" class="control-btn">
-              <q-tooltip>Reset View</q-tooltip>
-            </q-btn>
-            <q-btn round color="secondary" icon="crop_free" @click="fitToContent" size="sm" class="control-btn">
-              <q-tooltip>Fit to Map</q-tooltip>
-            </q-btn>
-            <q-btn
-              round
-              color="accent"
-              icon="straighten"
-              @click="drawMode='measure'"
-              size="sm"
-              class="control-btn"
-              :class="{'active': drawMode === 'measure'}"
-            >
-              <q-tooltip>Measure</q-tooltip>
-            </q-btn>
+          <!-- TOP HUD -->
+          <div class="map-hud">
+            <div class="map-hud__row">
+              <q-input
+                dense
+                filled
+                v-model="jumpInput"
+                placeholder="Jump to x|y"
+                class="map-hud__jump"
+                @keyup.enter="jumpToInput"
+              >
+                <template #prepend><q-icon name="pin_drop" /></template>
+                <template #append>
+                  <q-btn flat dense icon="near_me" @click="jumpToInput">
+                    <q-tooltip>Center on coordinates</q-tooltip>
+                  </q-btn>
+                </template>
+              </q-input>
+
+              <q-space />
+
+              <div class="map-hud__zoom">
+                <q-btn flat dense round icon="remove" @click="zoomBy(0.8)">
+                  <q-tooltip>Zoom out</q-tooltip>
+                </q-btn>
+
+                <q-slider
+                  dense
+                  v-model="zoomSlider"
+                  :min="Math.round(MIN_ZOOM_K * 100)"
+                  :max="500"
+                  :step="1"
+                  @change="applyZoomSlider"
+                  class="map-hud__slider"
+                />
+
+                <div class="map-hud__zoomtext">{{ zoomSlider }}%</div>
+
+                <q-btn flat dense round icon="add" @click="zoomBy(1.25)">
+                  <q-tooltip>Zoom in</q-tooltip>
+                </q-btn>
+              </div>
+
+              <q-btn flat dense round icon="square_foot" :class="{ 'is-active': showRulers }" @click="toggleRulers">
+                <q-tooltip>Toggle rulers</q-tooltip>
+              </q-btn>
+
+              <q-btn flat dense round :icon="showGrid ? 'grid_on' : 'grid_off'" @click="showGrid = !showGrid">
+                <q-tooltip>Toggle grid</q-tooltip>
+              </q-btn>
+
+              <q-btn
+                flat
+                dense
+                round
+                :icon="showBackground ? 'wallpaper' : 'hide_image'"
+                @click="showBackground = !showBackground"
+              >
+                <q-tooltip>Toggle background</q-tooltip>
+              </q-btn>
+
+              <q-btn flat dense round icon="refresh" @click="resetView">
+                <q-tooltip>Reset view</q-tooltip>
+              </q-btn>
+
+              <q-btn flat dense round icon="fullscreen" @click="toggleFullscreen">
+                <q-tooltip>Fullscreen (F)</q-tooltip>
+              </q-btn>
+
+              <q-btn flat dense round icon="image" @click="exportPng">
+                <q-tooltip>Export PNG</q-tooltip>
+              </q-btn>
+
+              <q-btn flat dense round icon="help_outline" @click="helpOpen = true">
+                <q-tooltip>Shortcuts</q-tooltip>
+              </q-btn>
+            </div>
           </div>
 
-          <div class="svg-container">
-            <svg
-              ref="svg"
-              id="svgMap"
-              preserveAspectRatio="xMidYMid meet"
-              @contextmenu.prevent="onContextMenu"
-              @mouseleave="hideTooltip"
-              @pointerdown="onPointerDown"
-              @pointermove="onPointerMove"
-              @pointerup="onPointerUp"
-            >
-              <defs>
-                <pattern id="grid" :width="gridSize" :height="gridSize" patternUnits="userSpaceOnUse">
-                  <path :d="`M${gridSize} 0 L0 0 L0 ${gridSize}`" fill="none" stroke="gray" stroke-width="0.05" :opacity="gridOpacity" />
-                </pattern>
-              </defs>
+          <!-- RIGHT FLOATING DRAW PANEL -->
+          <div class="draw-panel">
+            <q-card class="draw-panel__card">
+              <div class="draw-panel__head">
+                <div class="draw-panel__title">
+                  <q-icon name="draw" size="18px" class="q-mr-sm" />
+                  Draw & Measure
+                </div>
 
-              <g id="viewport">
-                <rect x="-100000" y="-100000" width="200000" height="200000" fill="#000" />
+                <q-space />
 
-                <image
-                  id="bgImage"
-                  :x="bgRect.x" :y="bgRect.y" :width="bgRect.width" :height="bgRect.height"
-                  :style="{ display: showBackground ? 'block' : 'none', opacity: bgOpacity }"
-                  href="/background.png"
-                  preserveAspectRatio="none"
-                />
+                <q-btn dense flat round icon="more_vert" class="draw-panel__iconbtn">
+                  <q-tooltip>More</q-tooltip>
+                  <q-menu anchor="bottom right" self="top right" class="draw-panel__menu">
+                    <q-list style="min-width: 220px">
+                      <q-item-label header>Storage</q-item-label>
 
-                <rect
-                  id="gridRect"
-                  x="-100000" y="-100000" width="200000" height="200000"
-                  :style="{ display: showGrid ? 'block' : 'none' }"
-                  fill="url(#grid)"
-                />
+                      <q-item clickable v-close-popup @click="saveToLocal">
+                        <q-item-section avatar><q-icon name="save" /></q-item-section>
+                        <q-item-section>Save drawings (local)</q-item-section>
+                      </q-item>
 
-                <line x1="-20000" y1="0" x2="20000" y2="0" stroke="white" stroke-width="0.1" opacity="0.12"/>
-                <line x1="0" y1="-20000" x2="0" y2="20000" stroke="white" stroke-width="0.1" opacity="0.12"/>
+                      <q-item clickable v-close-popup @click="loadFromLocal">
+                        <q-item-section avatar><q-icon name="restore" /></q-item-section>
+                        <q-item-section>Load drawings (local)</q-item-section>
+                      </q-item>
 
-                <g ref="markersGroup" id="markersLayer" v-html="markers"></g>
+                      <q-separator />
 
-                <g id="drawLayer" style="pointer-events: none;">
-                  <template v-for="(d,i) in drawings" :key="i">
-                    <line v-if="d.type==='line'" :x1="d.x1" :y1="d.y1" :x2="d.x2" :y2="d.y2" v-bind="d.style" />
-                    <rect v-else-if="d.type==='rect'" :x="d.x" :y="d.y" :width="d.width" :height="d.height" v-bind="d.style" />
-                    <circle v-else-if="d.type==='circle'" :cx="d.cx" :cy="d.cy" :r="d.r" v-bind="d.style" />
-                    <path v-else-if="d.type==='path'" :d="d.d" fill="none" v-bind="d.style" />
-                    <g v-else-if="d.type==='measure'">
-                      <line :x1="d.x1" :y1="d.y1" :x2="d.x2" :y2="d.y2" v-bind="d.style" />
-                      <text :x="(d.x1+d.x2)/2" :y="(d.y1+d.y2)/2 - 0.5" font-size="1.5" text-anchor="middle" class="measure-label">
-                        {{ Number(d.distance).toFixed(1) }} tiles
-                      </text>
-                    </g>
-                    <text v-else-if="d.type==='text'" :x="d.x" :y="d.y" v-bind="d.style">{{ d.text }}</text>
-                  </template>
+                      <q-item clickable v-close-popup @click="exportDrawings">
+                        <q-item-section avatar><q-icon name="download" /></q-item-section>
+                        <q-item-section>Export drawings JSON</q-item-section>
+                      </q-item>
+
+                      <q-item clickable v-close-popup @click="importDrawings">
+                        <q-item-section avatar><q-icon name="upload" /></q-item-section>
+                        <q-item-section>Import drawings JSON</q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-menu>
+                </q-btn>
+
+                <q-btn
+                  dense
+                  flat
+                  round
+                  :icon="drawPanelOpen ? 'expand_less' : 'expand_more'"
+                  class="draw-panel__iconbtn"
+                  @click="drawPanelOpen = !drawPanelOpen"
+                >
+                  <q-tooltip>{{ drawPanelOpen ? 'Collapse' : 'Expand' }}</q-tooltip>
+                </q-btn>
+              </div>
+
+              <q-separator />
+
+              <div v-show="drawPanelOpen" class="draw-panel__body">
+                <div class="draw-panel__section">
+                  <div class="draw-panel__label">Mode</div>
+
+                  <div class="draw-panel__modes">
+                    <q-btn dense flat icon="block" class="draw-panel__modebtn" :class="{ 'is-active': !drawMode }" @click="setDrawMode(null)">
+                      <q-tooltip>Off</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat icon="show_chart" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'line' }" @click="setDrawMode('line')">
+                      <q-tooltip>Line</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat icon="crop_square" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'rect' }" @click="setDrawMode('rect')">
+                      <q-tooltip>Rect</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat icon="radio_button_unchecked" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'circle' }" @click="setDrawMode('circle')">
+                      <q-tooltip>Circle</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat icon="gesture" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'path' }" @click="setDrawMode('path')">
+                      <q-tooltip>Freehand</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat icon="title" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'text' }" @click="setDrawMode('text')">
+                      <q-tooltip>Text</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat icon="straighten" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'measure' }" @click="toggleMeasureMode">
+                      <q-tooltip>Measure</q-tooltip>
+                    </q-btn>
+                  </div>
+                </div>
+
+                <div class="draw-panel__section">
+                  <div class="draw-panel__row">
+                    <div class="draw-panel__label">Style</div>
+                    <q-space />
+                    <q-btn dense flat icon="tune" class="draw-panel__pill">
+                      <q-tooltip>Advanced style</q-tooltip>
+                      <q-menu anchor="bottom right" self="top right" class="draw-panel__menu">
+                        <q-list style="min-width: 260px">
+                          <q-item-label header>Color</q-item-label>
+                          <q-item>
+                            <q-item-section>
+                              <q-input dense filled v-model="drawColor" label="Color (hex)" />
+                            </q-item-section>
+                          </q-item>
+
+                          <q-separator />
+
+                          <q-item-label header>Width</q-item-label>
+                          <q-item>
+                            <q-item-section>
+                              <q-slider dense v-model="drawWidth" :min="1" :max="10" :step="1" label label-always />
+                            </q-item-section>
+                          </q-item>
+                        </q-list>
+                      </q-menu>
+                    </q-btn>
+                  </div>
+
+                  <div class="draw-panel__row">
+                    <div class="draw-panel__swatches">
+                      <button
+                        v-for="c in quickColors"
+                        :key="c"
+                        class="swatch"
+                        :class="{ 'is-active': drawColor.toLowerCase() === c }"
+                        :style="{ background: c }"
+                        @click="setColor(c)"
+                        type="button"
+                      />
+                    </div>
+
+                    <q-space />
+
+                    <div class="draw-panel__widths">
+                      <q-btn
+                        v-for="w in quickWidths"
+                        :key="w"
+                        dense
+                        flat
+                        class="draw-panel__pill"
+                        :class="{ 'is-active': drawWidth === w }"
+                        @click="drawWidth = w"
+                      >
+                        {{ w }}
+                      </q-btn>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="draw-panel__section">
+                  <div class="draw-panel__label">Actions</div>
+
+                  <div class="draw-panel__actions">
+                    <q-btn dense flat icon="undo" class="draw-panel__actionbtn" :disable="!canUndo" @click="undo">
+                      <q-tooltip>Undo (Ctrl/⌘+Z)</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat icon="redo" class="draw-panel__actionbtn" :disable="!canRedo" @click="redo">
+                      <q-tooltip>Redo (Ctrl/⌘+Y)</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat icon="grid_4x4" class="draw-panel__actionbtn" :class="{ 'is-active': snapToGrid }" @click="snapToGrid = !snapToGrid">
+                      <q-tooltip>Snap to grid</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat icon="delete_sweep" class="draw-panel__actionbtn" @click="clearDrawings">
+                      <q-tooltip>Clear drawings</q-tooltip>
+                    </q-btn>
+                  </div>
+                </div>
+              </div>
+            </q-card>
+          </div>
+
+          <!-- FULL-HEIGHT MAP STAGE -->
+          <div class="map-stage" ref="stageEl">
+            <div class="svg-square" ref="squareEl">
+              <svg
+                ref="svg"
+                id="svgMap"
+                preserveAspectRatio="xMidYMid meet"
+                @contextmenu.prevent="onContextMenu"
+                @mouseleave="hideTooltip"
+                @pointerdown="onPointerDown"
+                @pointermove="onPointerMove"
+                @pointerup="onPointerUp"
+              >
+                <defs>
+                  <pattern id="grid" :width="gridSize" :height="gridSize" patternUnits="userSpaceOnUse">
+                    <path
+                      :d="`M${gridSize} 0 L0 0 L0 ${gridSize}`"
+                      fill="none"
+                      stroke="gray"
+                      stroke-width="0.05"
+                      :opacity="gridOpacity"
+                    />
+                  </pattern>
+                </defs>
+
+                <g id="viewport">
+                  <rect x="-100000" y="-100000" width="200000" height="200000" fill="#000" />
+
+                  <rect
+                    :x="MAP_CONTAINER.x"
+                    :y="MAP_CONTAINER.y"
+                    :width="MAP_CONTAINER.width"
+                    :height="MAP_CONTAINER.height"
+                    fill="rgba(255,255,255,0.02)"
+                    stroke="rgba(255,255,255,0.06)"
+                    stroke-width="0.6"
+                    vector-effect="non-scaling-stroke"
+                  />
+
+                  <rect
+                    :x="MAP_WORLD.x"
+                    :y="MAP_WORLD.y"
+                    :width="MAP_WORLD.width"
+                    :height="MAP_WORLD.height"
+                    fill="rgba(0,0,0,0)"
+                    stroke="rgba(0,255,255,0.18)"
+                    stroke-width="0.9"
+                    stroke-dasharray="3 3"
+                    vector-effect="non-scaling-stroke"
+                  />
+
+                  <image
+                    id="bgImage"
+                    :x="bgRect.x"
+                    :y="bgRect.y"
+                    :width="bgRect.width"
+                    :height="bgRect.height"
+                    :style="{ display: showBackground ? 'block' : 'none', opacity: bgOpacity }"
+                    href="/background.png"
+                    preserveAspectRatio="none"
+                  />
+
+                  <rect
+                    id="gridRect"
+                    x="-100000"
+                    y="-100000"
+                    width="200000"
+                    height="200000"
+                    :style="{ display: showGrid ? 'block' : 'none' }"
+                    fill="url(#grid)"
+                  />
+
+                  <line x1="-20000" y1="0" x2="20000" y2="0" stroke="white" stroke-width="0.1" opacity="0.12" />
+                  <line x1="0" y1="-20000" x2="0" y2="20000" stroke="white" stroke-width="0.1" opacity="0.12" />
+
+                  <g ref="markersGroup" id="markersLayer" v-html="markers"></g>
+
+                  <g id="drawLayer" style="pointer-events: none">
+                    <template v-for="(d, i) in drawings" :key="i">
+                      <line v-if="d.type === 'line'" :x1="d.x1" :y1="d.y1" :x2="d.x2" :y2="d.y2" v-bind="d.style" />
+                      <rect v-else-if="d.type === 'rect'" :x="d.x" :y="d.y" :width="d.width" :height="d.height" v-bind="d.style" />
+                      <circle v-else-if="d.type === 'circle'" :cx="d.cx" :cy="d.cy" :r="d.r" v-bind="d.style" />
+                      <path v-else-if="d.type === 'path'" :d="d.d" fill="none" v-bind="d.style" />
+                      <g v-else-if="d.type === 'measure'">
+                        <line :x1="d.x1" :y1="d.y1" :x2="d.x2" :y2="d.y2" v-bind="d.style" />
+                        <text :x="(d.x1 + d.x2) / 2" :y="(d.y1 + d.y2) / 2 - 0.5" font-size="1.5" text-anchor="middle" class="measure-label">
+                          {{ Number(d.distance).toFixed(1) }} tiles
+                        </text>
+                      </g>
+                      <text v-else-if="d.type === 'text'" :x="d.x" :y="d.y" v-bind="d.style">{{ d.text }}</text>
+                    </template>
+                  </g>
+
+                  <g id="previewLayer" ref="previewLayer" style="pointer-events: none"></g>
                 </g>
 
-                <g id="previewLayer" ref="previewLayer" style="pointer-events: none;"></g>
-              </g>
+                <!-- RULERS -->
+                <g v-if="showRulers" id="rulerOverlay" style="pointer-events: none">
+                  <rect :x="0" :y="0" :width="rulerW" :height="rulerThickness" fill="rgba(0,0,0,0.55)" />
+                  <rect :x="0" :y="0" :width="rulerThickness" :height="rulerH" fill="rgba(0,0,0,0.55)" />
 
-              <g id="coordLabels">
-                <text id="labelLeft"   text-anchor="end"    alignment-baseline="middle" class="coord-label"/>
-                <text id="labelRight"  text-anchor="start"  alignment-baseline="middle" class="coord-label"/>
-                <text id="labelTop"    text-anchor="middle" alignment-baseline="hanging" class="coord-label"/>
-                <text id="labelBottom" text-anchor="middle" alignment-baseline="baseline" class="coord-label"/>
-              </g>
-            </svg>
+                  <g>
+                    <template v-for="t in rulerXTicks" :key="'x' + t.value">
+                      <line
+                        :x1="t.px"
+                        :y1="rulerThickness"
+                        :x2="t.px"
+                        :y2="rulerThickness - (t.major ? 10 : 6)"
+                        stroke="rgba(255,255,255,0.75)"
+                        stroke-width="1"
+                      />
+                      <text
+                        v-if="t.major"
+                        :x="t.px"
+                        :y="12"
+                        fill="rgba(255,255,255,0.92)"
+                        font-size="10"
+                        text-anchor="middle"
+                      >
+                        {{ t.label }}
+                      </text>
+                    </template>
+                  </g>
 
-            <!-- Enhanced Context Menu -->
-            <q-menu
-              v-model="showContextMenu"
-              context-menu
-              touch-position
-              @before-show="onBeforeContextMenuShow"
-              @hide="onContextMenuHide"
-              :style="{ left: `${contextPosition.x}px`, top: `${contextPosition.y}px` }"
-              class="context-menu"
-            >
-              <q-list>
-                <q-item-label header>Village Actions</q-item-label>
+                  <g>
+                    <template v-for="t in rulerYTicks" :key="'y' + t.value">
+                      <line
+                        :x1="rulerThickness"
+                        :y1="t.py"
+                        :x2="rulerThickness - (t.major ? 10 : 6)"
+                        :y2="t.py"
+                        stroke="rgba(255,255,255,0.75)"
+                        stroke-width="1"
+                      />
+                      <text
+                        v-if="t.major"
+                        :x="12"
+                        :y="t.py + 3"
+                        fill="rgba(255,255,255,0.92)"
+                        font-size="10"
+                        text-anchor="start"
+                      >
+                        {{ t.label }}
+                      </text>
+                    </template>
+                  </g>
+                </g>
+              </svg>
 
-                <q-item clickable v-close-popup @click="centerOnContext" :disable="!ctx.hasMarker">
-                  <q-item-section avatar><q-icon name="center_focus_strong" /></q-item-section>
-                  <q-item-section>Center on village</q-item-section>
-                </q-item>
+              <!-- MINIMAP -->
+              <div class="minimap" v-if="minimapReady">
+                <div class="minimap__header">
+                  <div class="minimap__title">Minimap</div>
 
-                <q-item clickable v-close-popup @click="copyCoordinates">
-                  <q-item-section avatar><q-icon name="content_copy" /></q-item-section>
-                  <q-item-section>Copy coordinates</q-item-section>
-                </q-item>
+                  <div class="minimap__actions">
+                    <q-btn dense flat round icon="remove" @click.stop="minimapZoomBy(0.85)">
+                      <q-tooltip>Minimap zoom out</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat round icon="add" @click.stop="minimapZoomBy(1.18)">
+                      <q-tooltip>Minimap zoom in</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat round icon="my_location" @click.stop="minimapRecenterToView()">
+                      <q-tooltip>Recenter minimap</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat round icon="crop_free" @click.stop="minimapFitAll()">
+                      <q-tooltip>Fit minimap</q-tooltip>
+                    </q-btn>
+                  </div>
+                </div>
 
-                <q-item clickable v-close-popup :href="getTravianMapLink" target="_blank">
-                  <q-item-section avatar><q-icon name="open_in_new" /></q-item-section>
-                  <q-item-section>Open in Travian Map</q-item-section>
-                </q-item>
+                <svg
+                  ref="minimapSvg"
+                  class="minimap__svg"
+                  :viewBox="`${minimapView.x} ${minimapView.y} ${minimapView.width} ${minimapView.height}`"
+                  @pointerdown.prevent="onMinimapPointerDown"
+                  @pointermove.prevent="onMinimapPointerMove"
+                  @pointerup.prevent="onMinimapPointerUp"
+                  @pointercancel.prevent="onMinimapPointerUp"
+                  @wheel.prevent="onMinimapWheel"
+                >
+                  <rect
+                    :x="minimapBounds.x"
+                    :y="minimapBounds.y"
+                    :width="minimapBounds.width"
+                    :height="minimapBounds.height"
+                    fill="rgba(0,0,0,0.28)"
+                    stroke="rgba(255,255,255,0.16)"
+                    stroke-width="2"
+                    rx="18"
+                    ry="18"
+                  />
 
-                <q-separator />
+                  <rect
+                    :x="MAP_WORLD.x"
+                    :y="MAP_WORLD.y"
+                    :width="MAP_WORLD.width"
+                    :height="MAP_WORLD.height"
+                    fill="rgba(0,0,0,0)"
+                    stroke="rgba(0,255,255,0.35)"
+                    stroke-width="2"
+                    stroke-dasharray="5 4"
+                    vector-effect="non-scaling-stroke"
+                    rx="10"
+                    ry="10"
+                  />
 
-                <q-item-label header>Map Controls</q-item-label>
+                  <rect
+                    v-if="showBackground"
+                    :x="bgRect.x"
+                    :y="bgRect.y"
+                    :width="bgRect.width"
+                    :height="bgRect.height"
+                    fill="rgba(255,255,255,0.03)"
+                    stroke="rgba(255,255,255,0.06)"
+                    stroke-width="2"
+                  />
 
-                <q-item clickable v-close-popup @click="fitToContent">
-                  <q-item-section avatar><q-icon name="zoom_out_map" /></q-item-section>
-                  <q-item-section>Fit to villages</q-item-section>
-                </q-item>
+                  <g v-if="minimapPoints.length" opacity="0.85">
+                    <circle
+                      v-for="(p, i) in minimapPoints"
+                      :key="i"
+                      :cx="p.x"
+                      :cy="p.y"
+                      :r="p.r"
+                      fill="rgba(255,255,255,0.35)"
+                    />
+                  </g>
 
-                <q-item clickable v-close-popup @click="resetView">
-                  <q-item-section avatar><q-icon name="refresh" /></q-item-section>
-                  <q-item-section>Reset view</q-item-section>
-                </q-item>
-              </q-list>
-            </q-menu>
+                  <rect
+                    class="minimap__viewport"
+                    :x="viewWorld.x"
+                    :y="viewWorld.y"
+                    :width="viewWorld.width"
+                    :height="viewWorld.height"
+                    fill="rgba(0,255,255,0.10)"
+                    stroke="rgba(0,255,255,0.75)"
+                    stroke-width="3"
+                    rx="10"
+                    ry="10"
+                  />
 
-            <q-inner-loading :showing="loading">
-              <q-spinner color="primary" size="2em" />
-            </q-inner-loading>
+                  <circle
+                    :cx="cursor.x"
+                    :cy="cursor.y"
+                    r="10"
+                    fill="rgba(255,255,255,0.9)"
+                    stroke="rgba(0,0,0,0.55)"
+                    stroke-width="3"
+                  />
+                </svg>
 
-            <div
-              v-if="tooltip.show"
-              class="tooltip"
-              :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }"
-              v-html="tooltip.content"
-            />
+                <div class="minimap__footer">
+                  <div class="minimap__line">Cursor: <b>{{ Math.round(cursor.x) }}|{{ Math.round(-cursor.y) }}</b></div>
+                  <div class="minimap__line">
+                    Center: <b>{{ Math.round(viewCenter.x) }}|{{ Math.round(-viewCenter.y) }}</b>
+                    <span class="minimap__muted">·</span>
+                    <span class="minimap__muted">Zoom {{ zoomK.toFixed(2) }}×</span>
+                  </div>
+                </div>
+              </div>
+
+              <q-inner-loading :showing="loading">
+                <q-spinner color="primary" size="2em" />
+              </q-inner-loading>
+
+              <div
+                v-if="tooltip.show"
+                class="tooltip"
+                :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }"
+                v-html="tooltip.content"
+              />
+            </div>
           </div>
 
           <div class="statusbar row items-center q-px-sm q-py-xs">
-            <div class="col text-caption">Cursor: X {{ cursor.x.toFixed(0) }} / Y {{ cursor.y.toFixed(0) }}</div>
-            <div class="col text-caption text-right">Zoom: {{ zoomK.toFixed(2) }}×</div>
+            <div class="col text-caption">Zoom: {{ zoomK.toFixed(2) }}×</div>
+            <div class="col text-caption text-right">Cursor: {{ Math.round(cursor.x) }}|{{ Math.round(-cursor.y) }}</div>
           </div>
         </div>
       </template>
     </q-splitter>
 
-    <!-- Mobile: show the map full screen, controls open as bottom sheet -->
+    <!-- Mobile -->
     <div v-else class="map-column">
-      <div class="map-controls">
-        <q-btn round color="primary" icon="add" @click="zoomBy(1.25)" size="sm" class="control-btn">
-          <q-tooltip>Zoom In</q-tooltip>
-        </q-btn>
-        <q-btn round color="primary" icon="remove" @click="zoomBy(0.8)" size="sm" class="control-btn">
-          <q-tooltip>Zoom Out</q-tooltip>
-        </q-btn>
-        <q-btn round color="secondary" icon="center_focus_strong" @click="resetView" size="sm" class="control-btn">
-          <q-tooltip>Reset View</q-tooltip>
-        </q-btn>
-        <q-btn round color="secondary" icon="crop_free" @click="fitToContent" size="sm" class="control-btn">
-          <q-tooltip>Fit to Map</q-tooltip>
-        </q-btn>
-        <q-btn
-          round
-          color="accent"
-          icon="straighten"
-          @click="drawMode='measure'"
-          size="sm"
-          class="control-btn"
-          :class="{'active': drawMode === 'measure'}"
-        >
-          <q-tooltip>Measure</q-tooltip>
-        </q-btn>
+      <div class="map-hud">
+        <div class="map-hud__row">
+          <q-input dense filled v-model="jumpInput" placeholder="Jump to x|y" class="map-hud__jump" @keyup.enter="jumpToInput">
+            <template #prepend><q-icon name="pin_drop" /></template>
+            <template #append><q-btn flat dense icon="near_me" @click="jumpToInput" /></template>
+          </q-input>
+
+          <q-space />
+
+          <q-btn flat dense round icon="square_foot" :class="{ 'is-active': showRulers }" @click="toggleRulers" />
+          <q-btn flat dense round :icon="showGrid ? 'grid_on' : 'grid_off'" @click="showGrid = !showGrid" />
+          <q-btn flat dense round :icon="showBackground ? 'wallpaper' : 'hide_image'" @click="showBackground = !showBackground" />
+          <q-btn flat dense round icon="refresh" @click="resetView" />
+          <q-btn flat dense round icon="help_outline" @click="helpOpen = true" />
+        </div>
       </div>
 
-      <div class="svg-container">
-        <svg
-          ref="svg"
-          id="svgMap"
-          preserveAspectRatio="xMidYMid meet"
-          @contextmenu.prevent="onContextMenu"
-          @mouseleave="hideTooltip"
-          @pointerdown="onPointerDown"
-          @pointermove="onPointerMove"
-          @pointerup="onPointerUp"
-        >
-          <defs>
-            <pattern id="grid" :width="gridSize" :height="gridSize" patternUnits="userSpaceOnUse">
-              <path :d="`M${gridSize} 0 L0 0 L0 ${gridSize}`" fill="none" stroke="gray" stroke-width="0.05" :opacity="gridOpacity" />
-            </pattern>
-          </defs>
+      <div class="draw-panel draw-panel--mobile">
+        <q-card class="draw-panel__card">
+          <div class="draw-panel__head">
+            <div class="draw-panel__title">
+              <q-icon name="draw" size="18px" class="q-mr-sm" />
+              Draw & Measure
+            </div>
 
-          <g id="viewport">
-            <rect x="-100000" y="-100000" width="200000" height="200000" fill="#000" />
+            <q-space />
 
-            <image
-              id="bgImage"
-              :x="bgRect.x" :y="bgRect.y" :width="bgRect.width" :height="bgRect.height"
-              :style="{ display: showBackground ? 'block' : 'none', opacity: bgOpacity }"
-              href="/background.png"
-              preserveAspectRatio="none"
-            />
+            <q-btn dense flat round icon="more_vert" class="draw-panel__iconbtn">
+              <q-menu anchor="bottom right" self="top right" class="draw-panel__menu">
+                <q-list style="min-width: 220px">
+                  <q-item-label header>Storage</q-item-label>
 
-            <rect
-              id="gridRect"
-              x="-100000" y="-100000" width="200000" height="200000"
-              :style="{ display: showGrid ? 'block' : 'none' }"
-              fill="url(#grid)"
-            />
+                  <q-item clickable v-close-popup @click="saveToLocal">
+                    <q-item-section avatar><q-icon name="save" /></q-item-section>
+                    <q-item-section>Save drawings (local)</q-item-section>
+                  </q-item>
 
-            <line x1="-20000" y1="0" x2="20000" y2="0" stroke="white" stroke-width="0.1" opacity="0.12"/>
-            <line x1="0" y1="-20000" x2="0" y2="20000" stroke="white" stroke-width="0.1" opacity="0.12"/>
+                  <q-item clickable v-close-popup @click="loadFromLocal">
+                    <q-item-section avatar><q-icon name="restore" /></q-item-section>
+                    <q-item-section>Load drawings (local)</q-item-section>
+                  </q-item>
 
-            <g ref="markersGroup" id="markersLayer" v-html="markers"></g>
+                  <q-separator />
 
-            <g id="drawLayer" style="pointer-events: none;">
-              <template v-for="(d,i) in drawings" :key="i">
-                <line v-if="d.type==='line'" :x1="d.x1" :y1="d.y1" :x2="d.x2" :y2="d.y2" v-bind="d.style" />
-                <rect v-else-if="d.type==='rect'" :x="d.x" :y="d.y" :width="d.width" :height="d.height" v-bind="d.style" />
-                <circle v-else-if="d.type==='circle'" :cx="d.cx" :cy="d.cy" :r="d.r" v-bind="d.style" />
-                <path v-else-if="d.type==='path'" :d="d.d" fill="none" v-bind="d.style" />
-                <g v-else-if="d.type==='measure'">
-                  <line :x1="d.x1" :y1="d.y1" :x2="d.x2" :y2="d.y2" v-bind="d.style" />
-                  <text :x="(d.x1+d.x2)/2" :y="(d.y1+d.y2)/2 - 0.5" font-size="1.5" text-anchor="middle" class="measure-label">
-                    {{ Number(d.distance).toFixed(1) }} tiles
-                  </text>
-                </g>
-                <text v-else-if="d.type==='text'" :x="d.x" :y="d.y" v-bind="d.style">{{ d.text }}</text>
-              </template>
+                  <q-item clickable v-close-popup @click="exportDrawings">
+                    <q-item-section avatar><q-icon name="download" /></q-item-section>
+                    <q-item-section>Export drawings JSON</q-item-section>
+                  </q-item>
+
+                  <q-item clickable v-close-popup @click="importDrawings">
+                    <q-item-section avatar><q-icon name="upload" /></q-item-section>
+                    <q-item-section>Import drawings JSON</q-item-section>
+                  </q-item>
+                </q-list>
+              </q-menu>
+            </q-btn>
+
+            <q-btn dense flat round :icon="drawPanelOpen ? 'expand_less' : 'expand_more'" class="draw-panel__iconbtn" @click="drawPanelOpen = !drawPanelOpen" />
+          </div>
+
+          <q-separator />
+
+          <div v-show="drawPanelOpen" class="draw-panel__body">
+            <div class="draw-panel__section">
+              <div class="draw-panel__label">Mode</div>
+
+              <div class="draw-panel__modes">
+                <q-btn dense flat icon="block" class="draw-panel__modebtn" :class="{ 'is-active': !drawMode }" @click="setDrawMode(null)" />
+                <q-btn dense flat icon="show_chart" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'line' }" @click="setDrawMode('line')" />
+                <q-btn dense flat icon="crop_square" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'rect' }" @click="setDrawMode('rect')" />
+                <q-btn dense flat icon="radio_button_unchecked" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'circle' }" @click="setDrawMode('circle')" />
+                <q-btn dense flat icon="gesture" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'path' }" @click="setDrawMode('path')" />
+                <q-btn dense flat icon="title" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'text' }" @click="setDrawMode('text')" />
+                <q-btn dense flat icon="straighten" class="draw-panel__modebtn" :class="{ 'is-active': drawMode === 'measure' }" @click="toggleMeasureMode" />
+              </div>
+            </div>
+
+            <div class="draw-panel__section">
+              <div class="draw-panel__row">
+                <div class="draw-panel__label">Style</div>
+                <q-space />
+                <q-btn dense flat icon="tune" class="draw-panel__pill">
+                  <q-menu anchor="bottom right" self="top right" class="draw-panel__menu">
+                    <q-list style="min-width: 260px">
+                      <q-item-label header>Color</q-item-label>
+                      <q-item>
+                        <q-item-section>
+                          <q-input dense filled v-model="drawColor" label="Color (hex)" />
+                        </q-item-section>
+                      </q-item>
+                      <q-separator />
+                      <q-item-label header>Width</q-item-label>
+                      <q-item>
+                        <q-item-section>
+                          <q-slider dense v-model="drawWidth" :min="1" :max="10" :step="1" label label-always />
+                        </q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-menu>
+                </q-btn>
+              </div>
+
+              <div class="draw-panel__row">
+                <div class="draw-panel__swatches">
+                  <button
+                    v-for="c in quickColors"
+                    :key="c"
+                    class="swatch"
+                    :class="{ 'is-active': drawColor.toLowerCase() === c }"
+                    :style="{ background: c }"
+                    @click="setColor(c)"
+                    type="button"
+                  />
+                </div>
+
+                <q-space />
+
+                <div class="draw-panel__widths">
+                  <q-btn v-for="w in quickWidths" :key="w" dense flat class="draw-panel__pill" :class="{ 'is-active': drawWidth === w }" @click="drawWidth = w">
+                    {{ w }}
+                  </q-btn>
+                </div>
+              </div>
+            </div>
+
+            <div class="draw-panel__section">
+              <div class="draw-panel__label">Actions</div>
+
+              <div class="draw-panel__actions">
+                <q-btn dense flat icon="undo" class="draw-panel__actionbtn" :disable="!canUndo" @click="undo" />
+                <q-btn dense flat icon="redo" class="draw-panel__actionbtn" :disable="!canRedo" @click="redo" />
+                <q-btn dense flat icon="grid_4x4" class="draw-panel__actionbtn" :class="{ 'is-active': snapToGrid }" @click="snapToGrid = !snapToGrid" />
+                <q-btn dense flat icon="delete_sweep" class="draw-panel__actionbtn" @click="clearDrawings" />
+              </div>
+            </div>
+          </div>
+        </q-card>
+      </div>
+
+      <div class="map-stage" ref="stageEl">
+        <div class="svg-square" ref="squareEl">
+          <svg
+            ref="svg"
+            id="svgMap"
+            preserveAspectRatio="xMidYMid meet"
+            @contextmenu.prevent="onContextMenu"
+            @mouseleave="hideTooltip"
+            @pointerdown="onPointerDown"
+            @pointermove="onPointerMove"
+            @pointerup="onPointerUp"
+          >
+            <defs>
+              <pattern id="grid" :width="gridSize" :height="gridSize" patternUnits="userSpaceOnUse">
+                <path :d="`M${gridSize} 0 L0 0 L0 ${gridSize}`" fill="none" stroke="gray" stroke-width="0.05" :opacity="gridOpacity" />
+              </pattern>
+            </defs>
+
+            <g id="viewport">
+              <rect x="-100000" y="-100000" width="200000" height="200000" fill="#000" />
+
+              <rect
+                :x="MAP_CONTAINER.x"
+                :y="MAP_CONTAINER.y"
+                :width="MAP_CONTAINER.width"
+                :height="MAP_CONTAINER.height"
+                fill="rgba(255,255,255,0.02)"
+                stroke="rgba(255,255,255,0.06)"
+                stroke-width="0.6"
+                vector-effect="non-scaling-stroke"
+              />
+              <rect
+                :x="MAP_WORLD.x"
+                :y="MAP_WORLD.y"
+                :width="MAP_WORLD.width"
+                :height="MAP_WORLD.height"
+                fill="rgba(0,0,0,0)"
+                stroke="rgba(0,255,255,0.18)"
+                stroke-width="0.9"
+                stroke-dasharray="3 3"
+                vector-effect="non-scaling-stroke"
+              />
+
+              <image
+                id="bgImage"
+                :x="bgRect.x"
+                :y="bgRect.y"
+                :width="bgRect.width"
+                :height="bgRect.height"
+                :style="{ display: showBackground ? 'block' : 'none', opacity: bgOpacity }"
+                href="/background.png"
+                preserveAspectRatio="none"
+              />
+
+              <rect id="gridRect" x="-100000" y="-100000" width="200000" height="200000" :style="{ display: showGrid ? 'block' : 'none' }" fill="url(#grid)" />
+
+              <line x1="-20000" y1="0" x2="20000" y2="0" stroke="white" stroke-width="0.1" opacity="0.12" />
+              <line x1="0" y1="-20000" x2="0" y2="20000" stroke="white" stroke-width="0.1" opacity="0.12" />
+
+              <g ref="markersGroup" id="markersLayer" v-html="markers"></g>
+
+              <g id="drawLayer" style="pointer-events: none">
+                <template v-for="(d, i) in drawings" :key="i">
+                  <line v-if="d.type === 'line'" :x1="d.x1" :y1="d.y1" :x2="d.x2" :y2="d.y2" v-bind="d.style" />
+                  <rect v-else-if="d.type === 'rect'" :x="d.x" :y="d.y" :width="d.width" :height="d.height" v-bind="d.style" />
+                  <circle v-else-if="d.type === 'circle'" :cx="d.cx" :cy="d.cy" :r="d.r" v-bind="d.style" />
+                  <path v-else-if="d.type === 'path'" :d="d.d" fill="none" v-bind="d.style" />
+                  <g v-else-if="d.type === 'measure'">
+                    <line :x1="d.x1" :y1="d.y1" :x2="d.x2" :y2="d.y2" v-bind="d.style" />
+                    <text :x="(d.x1 + d.x2) / 2" :y="(d.y1 + d.y2) / 2 - 0.5" font-size="1.5" text-anchor="middle" class="measure-label">
+                      {{ Number(d.distance).toFixed(1) }} tiles
+                    </text>
+                  </g>
+                  <text v-else-if="d.type === 'text'" :x="d.x" :y="d.y" v-bind="d.style">{{ d.text }}</text>
+                </template>
+              </g>
+
+              <g id="previewLayer" ref="previewLayer" style="pointer-events: none"></g>
             </g>
 
-            <g id="previewLayer" ref="previewLayer" style="pointer-events: none;"></g>
-          </g>
+            <g v-if="showRulers" id="rulerOverlay" style="pointer-events: none">
+              <rect :x="0" :y="0" :width="rulerW" :height="rulerThickness" fill="rgba(0,0,0,0.55)" />
+              <rect :x="0" :y="0" :width="rulerThickness" :height="rulerH" fill="rgba(0,0,0,0.55)" />
+              <g>
+                <template v-for="t in rulerXTicks" :key="'mx' + t.value">
+                  <line :x1="t.px" :y1="rulerThickness" :x2="t.px" :y2="rulerThickness - (t.major ? 10 : 6)" stroke="rgba(255,255,255,0.75)" stroke-width="1" />
+                  <text v-if="t.major" :x="t.px" :y="12" fill="rgba(255,255,255,0.92)" font-size="10" text-anchor="middle">{{ t.label }}</text>
+                </template>
+              </g>
+              <g>
+                <template v-for="t in rulerYTicks" :key="'my' + t.value">
+                  <line :x1="rulerThickness" :y1="t.py" :x2="rulerThickness - (t.major ? 10 : 6)" :y2="t.py" stroke="rgba(255,255,255,0.75)" stroke-width="1" />
+                  <text v-if="t.major" :x="12" :y="t.py + 3" fill="rgba(255,255,255,0.92)" font-size="10" text-anchor="start">{{ t.label }}</text>
+                </template>
+              </g>
+            </g>
+          </svg>
 
-          <g id="coordLabels">
-            <text id="labelLeft"   text-anchor="end"    alignment-baseline="middle" class="coord-label"/>
-            <text id="labelRight"  text-anchor="start"  alignment-baseline="middle" class="coord-label"/>
-            <text id="labelTop"    text-anchor="middle" alignment-baseline="hanging" class="coord-label"/>
-            <text id="labelBottom" text-anchor="middle" alignment-baseline="baseline" class="coord-label"/>
-          </g>
-        </svg>
+          <div class="minimap" v-if="minimapReady">
+            <div class="minimap__header">
+              <div class="minimap__title">Minimap</div>
+              <div class="minimap__actions">
+                <q-btn dense flat round icon="remove" @click.stop="minimapZoomBy(0.85)" />
+                <q-btn dense flat round icon="add" @click.stop="minimapZoomBy(1.18)" />
+                <q-btn dense flat round icon="my_location" @click.stop="minimapRecenterToView()" />
+                <q-btn dense flat round icon="crop_free" @click.stop="minimapFitAll()" />
+              </div>
+            </div>
 
-        <q-menu context-menu>
-          <q-list style="min-width: 220px">
-            <q-item-label header>Actions</q-item-label>
-            <q-item clickable :disable="!ctx.hasMarker" @click="centerOnContext" v-close-popup>
-              <q-item-section avatar><q-icon name="center_focus_strong" /></q-item-section>
-              <q-item-section>Center map on this village</q-item-section>
-            </q-item>
-          </q-list>
-        </q-menu>
+            <svg
+              ref="minimapSvg"
+              class="minimap__svg"
+              :viewBox="`${minimapView.x} ${minimapView.y} ${minimapView.width} ${minimapView.height}`"
+              @pointerdown.prevent="onMinimapPointerDown"
+              @pointermove.prevent="onMinimapPointerMove"
+              @pointerup.prevent="onMinimapPointerUp"
+              @pointercancel.prevent="onMinimapPointerUp"
+              @wheel.prevent="onMinimapWheel"
+            >
+              <rect :x="minimapBounds.x" :y="minimapBounds.y" :width="minimapBounds.width" :height="minimapBounds.height" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.16)" stroke-width="2" rx="18" ry="18" />
+              <rect
+                :x="MAP_WORLD.x"
+                :y="MAP_WORLD.y"
+                :width="MAP_WORLD.width"
+                :height="MAP_WORLD.height"
+                fill="rgba(0,0,0,0)"
+                stroke="rgba(0,255,255,0.35)"
+                stroke-width="2"
+                stroke-dasharray="5 4"
+                vector-effect="non-scaling-stroke"
+                rx="10"
+                ry="10"
+              />
+              <rect v-if="showBackground" :x="bgRect.x" :y="bgRect.y" :width="bgRect.width" :height="bgRect.height" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.06)" stroke-width="2" />
 
-        <q-inner-loading :showing="loading">
-          <q-spinner color="primary" size="2em" />
-        </q-inner-loading>
+              <g v-if="minimapPoints.length" opacity="0.85">
+                <circle v-for="(p, i) in minimapPoints" :key="i" :cx="p.x" :cy="p.y" :r="p.r" fill="rgba(255,255,255,0.35)" />
+              </g>
 
-        <div
-          v-if="tooltip.show"
-          class="tooltip"
-          :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }"
-          v-html="tooltip.content"
-        />
+              <rect class="minimap__viewport" :x="viewWorld.x" :y="viewWorld.y" :width="viewWorld.width" :height="viewWorld.height" fill="rgba(0,255,255,0.10)" stroke="rgba(0,255,255,0.75)" stroke-width="3" rx="10" ry="10" />
+              <circle :cx="cursor.x" :cy="cursor.y" r="10" fill="rgba(255,255,255,0.9)" stroke="rgba(0,0,0,0.55)" stroke-width="3" />
+            </svg>
+
+            <div class="minimap__footer">
+              <div class="minimap__line">Cursor: <b>{{ Math.round(cursor.x) }}|{{ Math.round(-cursor.y) }}</b></div>
+              <div class="minimap__line">
+                Center: <b>{{ Math.round(viewCenter.x) }}|{{ Math.round(-viewCenter.y) }}</b>
+                <span class="minimap__muted">·</span>
+                <span class="minimap__muted">Zoom {{ zoomK.toFixed(2) }}×</span>
+              </div>
+            </div>
+          </div>
+
+          <q-inner-loading :showing="loading">
+            <q-spinner color="primary" size="2em" />
+          </q-inner-loading>
+
+          <div v-if="tooltip.show" class="tooltip" :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }" v-html="tooltip.content" />
+        </div>
       </div>
 
       <div class="statusbar row items-center q-px-sm q-py-xs">
-        <div class="col text-caption">Cursor: X {{ cursor.x.toFixed(0) }} / Y {{ cursor.y.toFixed(0) }}</div>
-        <div class="col text-caption text-right">Zoom: {{ zoomK.toFixed(2) }}×</div>
+        <div class="col text-caption">Zoom: {{ zoomK.toFixed(2) }}×</div>
+        <div class="col text-caption text-right">Cursor: {{ Math.round(cursor.x) }}|{{ Math.round(-cursor.y) }}</div>
       </div>
     </div>
 
-    <!-- Mobile menu button -->
-    <q-btn
-      v-if="$q.screen.lt.md"
-      round
-      color="primary"
-      icon="menu"
-      class="fixed-top-left q-ma-md"
-      style="z-index: 2000"
-      @click="mobileSidebarOpen = true"
-    />
-
-    <!-- Mobile Bottom Sheet -->
-    <q-dialog
-      v-if="$q.screen.lt.md"
-      v-model="mobileSidebarOpen"
-      position="bottom"
-      full-width
-      :maximized="$q.screen.lt.sm"
-      transition-show="slide-up"
-      transition-hide="slide-down"
-    >
-      <q-card class="bg-dark text-white" :style="$q.screen.lt.sm ? 'height: 90vh;' : 'min-height: 70vh; max-height: 90vh;'">
+    <!-- Help dialog -->
+    <q-dialog v-model="helpOpen">
+      <q-card style="min-width: 420px; max-width: 720px">
         <q-card-section class="row items-center q-pb-none">
-          <div class="text-h6">Map Controls</div>
+          <div class="text-h6">Map shortcuts</div>
           <q-space />
           <q-btn icon="close" flat round dense v-close-popup />
         </q-card-section>
 
-        <q-card-section class="q-pt-none">
-          <MapSidebarContent
-            :showBackground="showBackground"
-            :bgOpacity="bgOpacity"
-            :showGrid="showGrid"
-            :gridOpacity="gridOpacity"
-            :gridSize="gridSize"
-            :gotoX="gotoX"
-            :gotoY="gotoY"
-            :groupFilters="groupFilters"
-            :toggles="toggles"
-            :drawMode="drawMode"
-            :drawOptions="drawOptions"
-            :drawColor="drawColor"
-            :drawWidth="drawWidth"
-            :snapToGrid="snapToGrid"
-            :canUndo="canUndo"
-            :canRedo="canRedo"
-            @update:showBackground="val => showBackground = val"
-            @update:bgOpacity="val => bgOpacity = val"
-            @update:showGrid="val => showGrid = val"
-            @update:gridOpacity="val => gridOpacity = val"
-            @update:gridSize="val => gridSize = val"
-            @update:gotoX="val => gotoX = val"
-            @update:gotoY="val => gotoY = val"
-            @center-on-coords="centerOnCoords"
-            @toggle-all-markers="toggleAllMarkers"
-            @filter-group="filterGroup"
-            @select-group="selectGroup"
-            @update:drawMode="val => drawMode = val"
-            @update:drawColor="val => drawColor = val"
-            @update:drawWidth="val => drawWidth = val"
-            @update:snapToGrid="val => snapToGrid = val"
-            @undo="undo"
-            @redo="redo"
-            @clear-drawings="clearDrawings"
-            @export-drawings="exportDrawings"
-            @import-drawings="importDrawings"
-            @save-to-local="saveToLocal"
-            @load-from-local="loadFromLocal"
-          />
-        </q-card-section>
-      </q-card>
-    </q-dialog>
+        <q-card-section class="q-pt-sm">
+          <div class="text-body2">
+            <div><b>Mouse</b></div>
+            <div>• Wheel: zoom</div>
+            <div>• Drag: pan</div>
 
-    <!-- PLAYER PROFILE DIALOG -->
-    <q-dialog v-model="profileDialog">
-      <q-card style="min-width: 500px; max-width: 800px">
-        <q-card-section class="row items-center q-pb-sm">
-          <div class="text-h6">Player: {{ profileData.name }}</div>
-          <q-space />
-          <q-btn icon="close" flat round dense v-close-popup />
-        </q-card-section>
-
-        <q-card-section class="q-pt-none">
-          <div v-if="profileData.alliance" class="text-subtitle1">
-            Alliance: {{ profileData.alliance.name }} ({{ profileData.alliance.rank }})
+            <div class="q-mt-md"><b>Keyboard</b></div>
+            <div>• Ctrl/⌘+Z / Ctrl/⌘+Y: undo/redo drawings</div>
+            <div>• Esc: cancel drawing</div>
+            <div>• F: fullscreen</div>
           </div>
-          <div class="text-subtitle1">Villages: {{ profileData.villages?.length || 0 }}</div>
-          <div class="text-subtitle1">Points: {{ profileData.points?.toLocaleString() || 0 }}</div>
-          <div class="text-subtitle1">Rank: {{ profileData.rank || 'N/A' }}</div>
         </q-card-section>
       </q-card>
     </q-dialog>
 
-    <!-- Context Menu -->
+    <!-- Context menu -->
     <q-menu
       v-model="showContextMenu"
       context-menu
@@ -438,7 +924,9 @@
       @before-show="onBeforeContextMenuShow"
       @hide="onContextMenuHide"
     >
-      <q-list>
+      <q-list style="min-width: 240px">
+        <q-item-label header>Village Actions</q-item-label>
+
         <q-item clickable v-close-popup @click="centerOnContext" :disable="!ctx.hasMarker">
           <q-item-section avatar><q-icon name="center_focus_strong" /></q-item-section>
           <q-item-section>Center on village</q-item-section>
@@ -449,16 +937,18 @@
           <q-item-section>Copy coordinates</q-item-section>
         </q-item>
 
-        <q-item clickable v-close-popup :href="getTravianMapLink" target="_blank">
-          <q-item-section avatar><q-icon name="open_in_new" /></q-item-section>
-          <q-item-section>Open in Travian Map</q-item-section>
-        </q-item>
-
         <q-separator />
+
+        <q-item-label header>View</q-item-label>
 
         <q-item clickable v-close-popup @click="resetView">
           <q-item-section avatar><q-icon name="refresh" /></q-item-section>
           <q-item-section>Reset view</q-item-section>
+        </q-item>
+
+        <q-item clickable v-close-popup @click="exportPng">
+          <q-item-section avatar><q-icon name="image" /></q-item-section>
+          <q-item-section>Export PNG</q-item-section>
         </q-item>
       </q-list>
     </q-menu>
@@ -466,94 +956,109 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, computed, nextTick, watch } from 'vue';
-import { useQuasar } from 'quasar';
-import * as d3 from 'd3';
-import { api } from 'boot/axios';
-import MapSidebarContent from 'src/components/MapSidebarContent.vue';
+import { ref, reactive, onMounted, onBeforeUnmount, computed, nextTick, watch } from 'vue'
+import { useQuasar } from 'quasar'
+import * as d3 from 'd3'
+import { api } from 'boot/axios'
+import MapSidebarContent from 'src/components/MapSidebarContent.vue'
+
+/* =========================
+   Authoritative world bounds
+   ========================= */
+const MAP_MIN = -200
+const MAP_MAX = 200
+const MAP_SIZE = MAP_MAX - MAP_MIN // 400
+const MAP_PADDING = 30
+const MAP_WORLD = Object.freeze({ x: MAP_MIN, y: MAP_MIN, width: MAP_SIZE, height: MAP_SIZE })
+const MAP_CONTAINER = Object.freeze({
+  x: MAP_MIN - MAP_PADDING,
+  y: MAP_MIN - MAP_PADDING,
+  width: MAP_SIZE + MAP_PADDING * 2,
+  height: MAP_SIZE + MAP_PADDING * 2
+})
 
 /* === State === */
 const $q = useQuasar()
 const loading = ref(false)
 
-// Initialize Quasar plugins if not already done
-if (!window.Quasar) {
-  window.Quasar = { notify: $q.notify };
-}
-const splitter = ref(320);
-const mobileSidebarOpen = ref(false);
-let handleCheckboxChange = null;
+const splitter = ref(320)
+let handleCheckboxChange = null
+
+/** DOM refs (resize fix) */
+const stageEl = ref(null)
+const squareEl = ref(null)
+let resizeObserver = null
+let resizeRaf = 0
 
 /** Map & zoom */
-const svg = ref(null);
-const markersGroup = ref(null);
-const previewLayer = ref(null);
-let zoom; // d3 zoom instance
-const zoomK = ref(1);
-const cursor = ref({ x: 0, y: 0 });
-const gotoX = ref(0);
-const gotoY = ref(0);
+const svg = ref(null)
+const markersGroup = ref(null)
+const previewLayer = ref(null)
+let zoom
+const zoomK = ref(1)
+const cursor = ref({ x: 0, y: 0 })
+const gotoX = ref(0)
+const gotoY = ref(0)
+
+/** === Zoom limits === */
+const MAX_ZOOM_OUT_PERCENT = 50
+const MIN_ZOOM_K = 1 / (MAX_ZOOM_OUT_PERCENT / 100) // ≈ 0.558
+const MAX_ZOOM_K = 50
+
+/** === World pan limits ===
+ * IMPORTANT FIX:
+ * translateExtent must be defined in WORLD coordinates (not screen coords),
+ * otherwise d3 clamps translations and the view "jumps" when panning.
+ */
+const WORLD_MIN = MAP_CONTAINER.x
+const WORLD_MAX = MAP_CONTAINER.x + MAP_CONTAINER.width
+
+/** Initial centering requirement */
+const initialCenteredDone = ref(false)
+const INITIAL_CENTER = { x: 0, y: 0 }
+
+/** HUD */
+const jumpInput = ref('')
+const zoomSlider = ref(100)
+const helpOpen = ref(false)
 
 /** Layers */
-const showBackground = ref(true);
-const bgOpacity = ref(0.6);
-const showGrid = ref(true);
-const gridOpacity = ref(0.35);
-const gridSize = ref(2);
+const showBackground = ref(true)
+const bgOpacity = ref(0.6)
+const showGrid = ref(true)
+const gridOpacity = ref(0.35)
+const gridSize = ref(2)
 
 /** Markers & filters */
-const markers = ref('');
-const toggles = ref({ alliances: '', tribes: '' });
-const groupRefs = { alliances: null, tribes: null };
-const groupFilters = ref({ alliances: '', tribes: '' });
-let masterVisible = true;
+const markers = ref('')
+const toggles = ref({ alliances: '', tribes: '' })
+const groupFilters = ref({ alliances: '', tribes: '' })
+let masterVisible = true
 
-/** Background image metrics */
-const bgMeta = reactive({ w: 0, h: 0, loaded: false });
-const bgRect = reactive({ x: -400, y: -400, width: 800, height: 800 });
-let initialFitted = false;
+/** Background image */
+const bgMeta = reactive({ w: 0, h: 0, loaded: false })
+const bgRect = reactive({ x: MAP_WORLD.x, y: MAP_WORLD.y, width: MAP_WORLD.width, height: MAP_WORLD.height })
 
 /** Tooltip */
-const tooltip = ref({ show: false, x: 0, y: 0, content: '' });
+const tooltip = ref({ show: false, x: 0, y: 0, content: '' })
 
-/* === Context Menu === */
-const showContextMenu = ref(false);
-const contextPosition = ref({ x: 0, y: 0 });
-const ctx = reactive({
-  point: null,
-  hasMarker: false,
-  marker: null
-});
+/** Context menu */
+const showContextMenu = ref(false)
+const contextPosition = ref({ x: 0, y: 0 })
+const ctx = reactive({ point: null, hasMarker: false, marker: null })
 
 function onBeforeContextMenuShow() {
-  document.addEventListener('click', handleClickOutside);
+  document.addEventListener('click', handleClickOutside)
 }
-
 function onContextMenuHide() {
-  document.removeEventListener('click', handleClickOutside);
+  document.removeEventListener('click', handleClickOutside)
 }
-
 function handleClickOutside(event) {
-  if (showContextMenu.value && !event.target.closest('.q-menu')) {
-    showContextMenu.value = false;
-  }
+  if (showContextMenu.value && !event.target.closest('.q-menu')) showContextMenu.value = false
 }
-
-
-
-const getTravianMapLink = computed(() => {
-  if (!ctx.point) return '#';
-  const x = Math.round(ctx.point.x);
-  const y = Math.round(-ctx.point.y);
-  return `https://${$q.cookies.get('server') || 'ts1.x1.europe'}.travian.com/karte.php?x=${x}&y=${y}`;
-});
-
-/** Player dialog */
-const profileDialog = ref(false);
-const profileData = ref({ name: '', alliance: null, villages: [], points: 0, rank: null });
 
 /** Drawing */
-const drawMode = ref(null);
+const drawMode = ref(null)
 const drawOptions = [
   { label: 'Off', value: null },
   { label: 'Line', value: 'line' },
@@ -562,1076 +1067,1118 @@ const drawOptions = [
   { label: 'Freehand', value: 'path' },
   { label: 'Text', value: 'text' },
   { label: 'Measure', value: 'measure' }
-];
-const drawColor = ref('#ff0000');
-const drawWidth = ref(2);
-const snapToGrid = ref(false);
-const drawings = ref([]);
-const history = ref([]);
-const historyIndex = ref(-1);
-const canUndo = computed(() => historyIndex.value > 0);
-const canRedo = computed(() => Boolean(history.value.length && historyIndex.value < history.value.length - 1));
+]
+const drawColor = ref('#ff0000')
+const drawWidth = ref(2)
+const snapToGrid = ref(false)
+const drawings = ref([])
+const history = ref([])
+const historyIndex = ref(-1)
+const canUndo = computed(() => historyIndex.value > 0)
+const canRedo = computed(() => Boolean(history.value.length && historyIndex.value < history.value.length - 1))
 
-/* === Utils === */
-const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+/** Draw panel */
+const drawPanelOpen = ref(true)
+const quickColors = ['#ff1744', '#ff9100', '#ffd600', '#00e676', '#00bcd4', '#2979ff', '#7c4dff', '#ffffff']
+const quickWidths = [1, 2, 3, 5]
+function setColor(c) {
+  drawColor.value = c
+}
+
+/** Rulers */
+const showRulers = ref(true)
+const rulerThickness = 26
+const rulerW = ref(0)
+const rulerH = ref(0)
+const rulerXTicks = ref([])
+const rulerYTicks = ref([])
+
+/** Minimap */
+const minimapSvg = ref(null)
+const minimapBounds = reactive({ ...MAP_CONTAINER })
+const minimapReady = ref(false)
+const minimapView = reactive({ ...MAP_CONTAINER })
+const minimapMinScale = 0.35
+const minimapMaxScale = 3.5
+const minimapPoints = ref([])
+
+const viewWorld = reactive({ x: -50, y: -50, width: 100, height: 100 })
+const viewCenter = computed(() => ({ x: viewWorld.x + viewWorld.width / 2, y: viewWorld.y + viewWorld.height / 2 }))
+
+const minimapDrag = reactive({
+  active: false,
+  mode: null,
+  startWorld: { x: 0, y: 0 },
+  startViewBox: { x: 0, y: 0, width: 0, height: 0 },
+  startCenter: { x: 0, y: 0 }
+})
+
+/* === Helpers === */
+const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n))
 
 function pushHistory() {
-  history.value = history.value.slice(0, historyIndex.value + 1);
-  history.value.push(JSON.parse(JSON.stringify(drawings.value)));
-  historyIndex.value = history.value.length - 1;
+  history.value = history.value.slice(0, historyIndex.value + 1)
+  history.value.push(JSON.parse(JSON.stringify(drawings.value)))
+  historyIndex.value = history.value.length - 1
 }
-
 function undo() {
-  if (canUndo.value) {
-    historyIndex.value--;
-    drawings.value = JSON.parse(JSON.stringify(history.value[historyIndex.value]));
-  }
+  if (!canUndo.value) return
+  historyIndex.value--
+  drawings.value = JSON.parse(JSON.stringify(history.value[historyIndex.value]))
 }
-
 function redo() {
-  if (canRedo.value) {
-    historyIndex.value++;
-    drawings.value = JSON.parse(JSON.stringify(history.value[historyIndex.value]));
-  }
+  if (!canRedo.value) return
+  historyIndex.value++
+  drawings.value = JSON.parse(JSON.stringify(history.value[historyIndex.value]))
 }
-
 function clearDrawings() {
-  drawings.value = [];
-  pushHistory();
-  saveToLocal();
+  drawings.value = []
+  pushHistory()
+  saveToLocal()
 }
-
 function saveToLocal() {
-  localStorage.setItem('drawings', JSON.stringify(drawings.value));
+  localStorage.setItem('drawings', JSON.stringify(drawings.value))
+}
+function loadFromLocal() {
+  const raw = localStorage.getItem('drawings')
+  if (raw) {
+    drawings.value = JSON.parse(raw)
+    pushHistory()
+  }
+}
+function exportDrawings() {
+  const dataStr = JSON.stringify(drawings.value, null, 2)
+  const dataBlob = new Blob([dataStr], { type: 'application/json' })
+  const url = URL.createObjectURL(dataBlob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `drawings-${Date.now()}.json`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+function importDrawings() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'application/json'
+  input.onchange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        drawings.value = JSON.parse(String(event.target?.result || '[]'))
+        pushHistory()
+        saveToLocal()
+      } catch (err) {
+        console.error('Failed to import drawings:', err)
+      }
+    }
+    reader.readAsText(file)
+  }
+  input.click()
 }
 
-function loadFromLocal() {
-  const raw = localStorage.getItem('drawings');
-  if (raw) {
-    drawings.value = JSON.parse(raw);
-    pushHistory();
+/* === Disable page scroll ONLY while on map page === */
+function lockPageScroll() {
+  document.body.classList.add('map-no-scroll')
+  document.documentElement.classList.add('map-no-scroll')
+}
+function unlockPageScroll() {
+  document.body.classList.remove('map-no-scroll')
+  document.documentElement.classList.remove('map-no-scroll')
+}
+
+/* === PNG export === */
+async function exportPng() {
+  if (!svg.value) return
+  try {
+    const s = svg.value
+    const clone = s.cloneNode(true)
+    const rect = s.getBoundingClientRect()
+    clone.setAttribute('width', String(Math.max(1, Math.round(rect.width))))
+    clone.setAttribute('height', String(Math.max(1, Math.round(rect.height))))
+    clone.querySelectorAll('text').forEach((t) => t.setAttribute('font-family', 'sans-serif'))
+
+    const xml = new XMLSerializer().serializeToString(clone)
+    const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' })
+    const svgUrl = URL.createObjectURL(svgBlob)
+
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(rect.width)
+      canvas.height = Math.round(rect.height)
+      const ctx2d = canvas.getContext('2d')
+      ctx2d.drawImage(img, 0, 0)
+
+      URL.revokeObjectURL(svgUrl)
+      canvas.toBlob((blob) => {
+        if (!blob) return
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `map-${Date.now()}.png`
+        a.click()
+        URL.revokeObjectURL(url)
+      }, 'image/png')
+    }
+    img.src = svgUrl
+  } catch (e) {
+    console.warn('PNG export failed:', e)
+    $q.notify({ message: 'PNG export failed (check console).', color: 'negative', position: 'top', timeout: 1400 })
   }
 }
 
-function exportDrawings() {
-  const dataStr = JSON.stringify(drawings.value, null, 2);
-  const dataBlob = new Blob([dataStr], { type: 'application/json' });
-  const url = URL.createObjectURL(dataBlob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `drawings-${Date.now()}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
+/* === Minimap helpers (stable bounds) === */
+function syncMinimapBounds() {
+  Object.assign(minimapBounds, MAP_CONTAINER)
+  minimapReady.value = true
+
+  if (!Number.isFinite(minimapView.width) || minimapView.width <= 0) {
+    Object.assign(minimapView, MAP_CONTAINER)
+  }
+  clampMinimapView()
+}
+function clampMinimapView() {
+  const b = minimapBounds
+  const v = minimapView
+  const maxX = b.x + b.width - v.width
+  const maxY = b.y + b.height - v.height
+  v.x = Math.max(b.x, Math.min(v.x, maxX))
+  v.y = Math.max(b.y, Math.min(v.y, maxY))
+}
+function minimapFitAll() {
+  Object.assign(minimapView, minimapBounds)
+  clampMinimapView()
+}
+function minimapRecenterToView() {
+  const b = minimapBounds
+  const cx = viewCenter.value.x
+  const cy = viewCenter.value.y
+  minimapView.x = cx - minimapView.width / 2
+  minimapView.y = cy - minimapView.height / 2
+  clampMinimapView()
+  if (cx < b.x || cx > b.x + b.width || cy < b.y || cy > b.y + b.height) {
+    minimapView.x = b.x + b.width / 2 - minimapView.width / 2
+    minimapView.y = b.y + b.height / 2 - minimapView.height / 2
+    clampMinimapView()
+  }
+}
+function minimapZoomBy(factor) {
+  const b = minimapBounds
+  const cx = minimapView.x + minimapView.width / 2
+  const cy = minimapView.y + minimapView.height / 2
+  const newW = minimapView.width / factor
+  const newH = minimapView.height / factor
+
+  const minW = b.width * minimapMinScale
+  const maxW = b.width * minimapMaxScale
+
+  const w = Math.max(minW, Math.min(newW, maxW))
+  const h = Math.max(b.height * minimapMinScale, Math.min(newH, b.height * minimapMaxScale))
+
+  minimapView.width = w
+  minimapView.height = h
+  minimapView.x = cx - w / 2
+  minimapView.y = cy - h / 2
+  clampMinimapView()
+}
+function minimapToWorld(evt) {
+  const el = minimapSvg.value
+  if (!el) return { x: 0, y: 0 }
+  const r = el.getBoundingClientRect()
+  const px = evt.clientX - r.left
+  const py = evt.clientY - r.top
+  return {
+    x: minimapView.x + (px / r.width) * minimapView.width,
+    y: minimapView.y + (py / r.height) * minimapView.height
+  }
+}
+function isInsideViewport(worldPt) {
+  return (
+    worldPt.x >= viewWorld.x &&
+    worldPt.x <= viewWorld.x + viewWorld.width &&
+    worldPt.y >= viewWorld.y &&
+    worldPt.y <= viewWorld.y + viewWorld.height
+  )
+}
+function onMinimapPointerDown(evt) {
+  if (!minimapSvg.value) return
+  minimapSvg.value.setPointerCapture?.(evt.pointerId)
+  const wpt = minimapToWorld(evt)
+  minimapDrag.active = true
+  minimapDrag.startWorld = { ...wpt }
+  minimapDrag.startViewBox = { x: minimapView.x, y: minimapView.y, width: minimapView.width, height: minimapView.height }
+  minimapDrag.startCenter = { ...viewCenter.value }
+  minimapDrag.mode = isInsideViewport(wpt) ? 'dragViewport' : 'pan'
+  if (minimapDrag.mode === 'pan') {
+    centerAt(
+      clamp(wpt.x, WORLD_MIN, WORLD_MAX),
+      clamp(wpt.y, WORLD_MIN, WORLD_MAX)
+    )
+  }
+}
+function onMinimapPointerMove(evt) {
+  if (!minimapDrag.active) return
+  const now = minimapToWorld(evt)
+  const dx = now.x - minimapDrag.startWorld.x
+  const dy = now.y - minimapDrag.startWorld.y
+  if (minimapDrag.mode === 'pan') {
+    minimapView.x = minimapDrag.startViewBox.x + dx
+    minimapView.y = minimapDrag.startViewBox.y + dy
+    clampMinimapView()
+  } else {
+    centerAt(
+      clamp(minimapDrag.startCenter.x + dx, WORLD_MIN, WORLD_MAX),
+      clamp(minimapDrag.startCenter.y + dy, WORLD_MIN, WORLD_MAX)
+    )
+  }
+}
+function onMinimapPointerUp(evt) {
+  if (!minimapDrag.active) return
+  minimapDrag.active = false
+  minimapDrag.mode = null
+  minimapSvg.value?.releasePointerCapture?.(evt.pointerId)
+}
+function onMinimapWheel(evt) {
+  const factor = evt.deltaY < 0 ? 1.18 : 0.85
+  const before = minimapToWorld(evt)
+  minimapZoomBy(factor)
+  const after = minimapToWorld(evt)
+  minimapView.x += before.x - after.x
+  minimapView.y += before.y - after.y
+  clampMinimapView()
+}
+function rebuildMinimapPoints() {
+  const g = markersGroup.value
+  if (!g) {
+    minimapPoints.value = []
+    return
+  }
+  const nodes = Array.from(g.querySelectorAll('.marker'))
+  const N = 500
+  const step = Math.max(1, Math.floor(nodes.length / N))
+  const pts = []
+  for (let i = 0; i < nodes.length; i += step) {
+    const el = nodes[i]
+    try {
+      const bb = el.getBBox()
+      pts.push({ x: bb.x + bb.width / 2, y: bb.y + bb.height / 2, r: 6 })
+    } catch {}
+  }
+  minimapPoints.value = pts
 }
 
-function importDrawings() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'application/json';
-  input.onchange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          drawings.value = JSON.parse(event.target.result);
-          pushHistory();
-          saveToLocal();
-        } catch (err) {
-          console.error('Failed to import drawings:', err);
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-  input.click();
+/* === Fit / position === */
+function syncZoomExtents() {
+  if (!svg.value || !zoom) return
+
+  const r = svg.value.getBoundingClientRect()
+  if (!r || r.width <= 0 || r.height <= 0) return
+
+  zoom.extent([[0, 0], [r.width, r.height]])
+
+  // === CRITICAL FIX (stops pan jump) ===
+  // translateExtent is in WORLD coordinates, not screen coordinates.
+  // Using screen-space numbers here makes d3 clamp translations unpredictably.
+  zoom.translateExtent([
+    [MAP_CONTAINER.x, MAP_CONTAINER.y],
+    [MAP_CONTAINER.x + MAP_CONTAINER.width, MAP_CONTAINER.y + MAP_CONTAINER.height]
+  ])
+
+  rulerW.value = r.width
+  rulerH.value = r.height
 }
 
-/* === Marker Management === */
-// Fit the map to show all content
-function fitToContent() {
-  if (!svg.value || !zoom) return;
-  const mbox = markersBBoxOrDefault();
-  const bbox = unionBBox(mbox, bgRect);
-  fitToBBox(bbox, 1.02);
+function forceReapplyTransformAfterResize() {
+  if (!svg.value || !zoom) return
+  const t = d3.zoomTransform(svg.value)
+  d3.select(svg.value).call(zoom.transform, t)
+}
+function scheduleResizeRefresh() {
+  cancelAnimationFrame(resizeRaf)
+  resizeRaf = requestAnimationFrame(() => {
+    syncZoomExtents()
+    forceReapplyTransformAfterResize()
+    updateViewWorldAndRulers()
+  })
+}
+
+/** Initial centered view */
+function setInitialCenteredViewIfPossible() {
+  if (initialCenteredDone.value) return
+  if (!svg.value || !zoom) return
+  const r = svg.value.getBoundingClientRect()
+  if (!r || r.width <= 0 || r.height <= 0) return
+
+  syncZoomExtents()
+
+  const k = clamp(1.25, MIN_ZOOM_K, MAX_ZOOM_K)
+  const tx = r.width / 2 - k * INITIAL_CENTER.x
+  const ty = r.height / 2 - k * INITIAL_CENTER.y
+  const t = d3.zoomIdentity.translate(tx, ty).scale(k)
+
+  d3.select(svg.value).call(zoom.transform, t)
+  zoomSlider.value = Math.round(k * 100)
+  initialCenteredDone.value = true
+  updateViewWorldAndRulers()
+}
+
+function centerAt(x, y, k) {
+  if (!svg.value || !zoom) return
+  if (!Number.isFinite(k)) k = d3.zoomTransform(svg.value).k || 1
+
+  x = clamp(x, WORLD_MIN, WORLD_MAX)
+  y = clamp(y, WORLD_MIN, WORLD_MAX)
+
+  syncZoomExtents()
+
+  const rect = svg.value.getBoundingClientRect()
+  const tx = rect.width / 2 - k * x
+  const ty = rect.height / 2 - k * y
+  const t = d3.zoomIdentity.translate(tx, ty).scale(k)
+
+  d3.select(svg.value).transition().duration(220).call(zoom.transform, t)
+}
+
+function zoomBy(factor) {
+  if (!svg.value || !zoom) return
+  const t = d3.zoomTransform(svg.value)
+  const nextK = clamp(t.k * factor, MIN_ZOOM_K, MAX_ZOOM_K)
+  const rect = svg.value.getBoundingClientRect()
+  const cx = (rect.width / 2 - t.x) / t.k
+  const cy = (rect.height / 2 - t.y) / t.k
+  centerAt(cx, cy, nextK)
+}
+
+function resetView() {
+  centerAt(INITIAL_CENTER.x, INITIAL_CENTER.y, 1)
+}
+function centerOnCoords() {
+  centerAt(Number(gotoX.value) || 0, Number(gotoY.value) || 0)
+}
+
+/* === Zoom slider === */
+function syncSliderFromZoom() {
+  zoomSlider.value = clamp(
+    Math.round(zoomK.value * 100),
+    Math.round(MIN_ZOOM_K * 100),
+    500
+  )
+}
+function applyZoomSlider() {
+  if (!svg.value || !zoom) return
+  const k = clamp(zoomSlider.value / 100, MIN_ZOOM_K, MAX_ZOOM_K)
+  const t = d3.zoomTransform(svg.value)
+  const rect = svg.value.getBoundingClientRect()
+  const cx = (rect.width / 2 - t.x) / t.k
+  const cy = (rect.height / 2 - t.y) / t.k
+  centerAt(cx, cy, k)
+}
+
+function jumpToInput() {
+  const raw = (jumpInput.value || '').trim()
+  const m = raw.match(/^\s*(-?\d+)\s*[|, ]\s*(-?\d+)\s*$/)
+  if (!m) {
+    $q.notify({ message: 'Use format: x|y (example: -12|34)', color: 'warning', position: 'top', timeout: 1200 })
+    return
+  }
+  const x = Number(m[1])
+  const yTravian = Number(m[2])
+  centerAt(
+    clamp(x, WORLD_MIN, WORLD_MAX),
+    clamp(-yTravian, WORLD_MIN, WORLD_MAX)
+  )
+}
+async function toggleFullscreen() {
+  const el = svg.value?.closest('.map-column') || svg.value
+  if (!el) return
+  try {
+    if (!document.fullscreenElement) await el.requestFullscreen?.()
+    else await document.exitFullscreen?.()
+  } catch (e) {
+    console.warn('Fullscreen failed:', e)
+  }
+}
+
+/* === Rulers === */
+function niceStep(worldPerPx) {
+  const target = worldPerPx * 80
+  const pow = Math.pow(10, Math.floor(Math.log10(Math.max(1e-9, target))))
+  const n = target / pow
+  if (n < 1.5) return 1 * pow
+  if (n < 3.5) return 2 * pow
+  if (n < 7.5) return 5 * pow
+  return 10 * pow
+}
+function updateViewWorldAndRulers() {
+  if (!svg.value || !zoom) return
+  const rect = svg.value.getBoundingClientRect()
+  if (!rect || rect.width <= 0 || rect.height <= 0) return
+  const t = d3.zoomTransform(svg.value)
+
+  const x0 = t.invertX(0)
+  const y0 = t.invertY(0)
+  const x1 = t.invertX(rect.width)
+  const y1 = t.invertY(rect.height)
+
+  viewWorld.x = Math.min(x0, x1)
+  viewWorld.y = Math.min(y0, y1)
+  viewWorld.width = Math.abs(x1 - x0)
+  viewWorld.height = Math.abs(y1 - y0)
+
+  if (!showRulers.value) {
+    rulerXTicks.value = []
+    rulerYTicks.value = []
+    return
+  }
+
+  const worldPerPx = 1 / t.k
+  const step = niceStep(worldPerPx)
+  const minor = step / 5
+
+  const xStart = Math.floor(viewWorld.x / minor) * minor
+  const xEnd = viewWorld.x + viewWorld.width
+  const xt = []
+  for (let x = xStart; x <= xEnd + minor; x += minor) {
+    const px = t.applyX(x)
+    if (px < 0 || px > rect.width) continue
+    const isMajor = Math.abs(x / step - Math.round(x / step)) < 1e-6
+    xt.push({ value: x, px, major: isMajor, label: isMajor ? String(Math.round(x)) : '' })
+  }
+
+  const yStart = Math.floor(viewWorld.y / minor) * minor
+  const yEnd = viewWorld.y + viewWorld.height
+  const yt = []
+  for (let y = yStart; y <= yEnd + minor; y += minor) {
+    const py = t.applyY(y)
+    if (py < 0 || py > rect.height) continue
+    const isMajor = Math.abs(y / step - Math.round(y / step)) < 1e-6
+    yt.push({ value: y, py, major: isMajor, label: isMajor ? String(Math.round(-y)) : '' })
+  }
+
+  rulerXTicks.value = xt
+  rulerYTicks.value = yt
+}
+function toggleRulers() {
+  showRulers.value = !showRulers.value
+  updateViewWorldAndRulers()
 }
 
 /* === Marker loading === */
-const CACHE_KEY = 'markersCache';
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+const CACHE_KEY = 'markersCache'
+const CACHE_TTL = 15 * 60 * 1000
 
 async function reloadMarkers(force = false) {
-  loading.value = true;
+  loading.value = true
   try {
-    let payload = null;
+    let payload = null
     if (!force) {
       try {
-        const raw = localStorage.getItem(CACHE_KEY);
+        const raw = localStorage.getItem(CACHE_KEY)
         if (raw) {
-          const { at, data } = JSON.parse(raw);
-          if (Date.now() - at < CACHE_TTL) payload = data;
+          const { at, data } = JSON.parse(raw)
+          if (Date.now() - at < CACHE_TTL) payload = data
         }
-      } catch (e) {
-        console.warn('Failed to parse cache:', e);
-        localStorage.removeItem(CACHE_KEY);
+      } catch {
+        localStorage.removeItem(CACHE_KEY)
       }
     }
     if (!payload) {
-      try {
-        const { data } = await api.get('/api/markers');
-        if (!data) {
-          console.error('API returned empty data');
-          return;
-        }
-        payload = data;
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), data }));
-      } catch (error) {
-        console.error('Failed to load markers from API:', error);
-        // Try to use cached data even if expired
-        try {
-          const raw = localStorage.getItem(CACHE_KEY);
-          if (raw) {
-            const { data } = JSON.parse(raw);
-            payload = data;
-            console.warn('Using expired cache due to API error');
-          }
-        } catch (e) {
-          console.error('No valid cache available:', e);
-        }
-        if (!payload) {
-          throw error;
-        }
-      }
+      const { data } = await api.get('/api/markers')
+      payload = data
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), data }))
     }
-    
-    if (!payload) {
-      console.error('No markers data available');
-      markers.value = '';
-      toggles.value = { alliances: '', tribes: '' };
-      return;
-    }
-    
-    markers.value = payload?.markers || '';
+
+    markers.value = payload?.markers || ''
     toggles.value = {
       alliances: payload?.alliance_checkboxes || '',
       tribes: payload?.tribe_checkboxes || ''
-    };
-    
-    if (!markers.value) {
-      console.warn('Markers data is empty. Payload:', payload);
     }
-    
-    await nextTick();
-    
 
-    
-    // Marker events via delegation
-    bindMarkerEvents();
-    
-    updateMarkersVisibility();
-    layoutBackground();
+    await nextTick()
+    bindMarkerEvents()
+    updateMarkersVisibility()
+
+    rebuildMinimapPoints()
+    syncMinimapBounds()
+
+    setInitialCenteredViewIfPossible()
   } catch (error) {
-    console.error('Error loading markers:', error);
-    markers.value = '';
-    toggles.value = { alliances: '', tribes: '' };
+    console.error('Error loading markers:', error)
+    markers.value = ''
+    toggles.value = { alliances: '', tribes: '' }
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 
-/* === Marker filtering === */
-const elementText = (el) => (el.textContent || '').toLowerCase();
+/* === Marker filtering/visibility === */
+const elementText = (el) => (el.textContent || '').toLowerCase()
 
 async function filterGroup(group) {
-  await nextTick();
-  // Find the group container in the DOM (it's in MapSidebarContent)
-  const containers = document.querySelectorAll('.section-scroll');
-  let root = null;
+  await nextTick()
+  const containers = document.querySelectorAll('.section-scroll')
+  let root = null
   for (const container of containers) {
     if (container.innerHTML.includes(`toggle${capitalize(group.slice(0, -1))}`)) {
-      root = container;
-      break;
+      root = container
+      break
     }
   }
-  if (!root) return;
-  const term = (groupFilters.value[group] || '').toLowerCase().trim();
-  Array.from(root.querySelectorAll('label, .q-checkbox, .q-option, div, span')).forEach(el => {
-    const match = term === '' || elementText(el).includes(term);
-    el.style.display = match ? '' : 'none';
-  });
+  if (!root) return
+  const term = (groupFilters.value[group] || '').toLowerCase().trim()
+  Array.from(root.querySelectorAll('label, .q-checkbox, .q-option, div, span')).forEach((el) => {
+    el.style.display = term === '' || elementText(el).includes(term) ? '' : 'none'
+  })
 }
-
 async function selectGroup(group, mode) {
-  await nextTick();
-  const checkboxClass = `${group.slice(0, -1)}-checkbox`;
-  const boxes = document.querySelectorAll(`.${checkboxClass}`);
-  boxes.forEach(cb => {
-    if (mode === 'all') cb.checked = true;
-    else if (mode === 'none') cb.checked = false;
-    else cb.checked = !cb.checked;
-  });
-  updateMarkersVisibility();
+  await nextTick()
+  const checkboxClass = `${group.slice(0, -1)}-checkbox`
+  const boxes = document.querySelectorAll(`.${checkboxClass}`)
+  boxes.forEach((cb) => {
+    if (mode === 'all') cb.checked = true
+    else if (mode === 'none') cb.checked = false
+    else cb.checked = !cb.checked
+  })
+  updateMarkersVisibility()
 }
-
 function toggleAllMarkers() {
-  masterVisible = !masterVisible;
-  updateMarkersVisibility();
+  masterVisible = !masterVisible
+  updateMarkersVisibility()
 }
-
-function bindMarkerEvents() {
-  const root = markersGroup.value;
-  if (!root) return;
-  
-  root.onpointerover = (e) => {
-    const el = e.target.closest('.marker');
-    if (!el) return;
-    const tip = el.getAttribute('data-tooltip') || '';
-    const content = sanitize(tip.replace(/<br>/g, '<br/>'));
-    tooltip.value = { show: true, x: e.clientX + 8, y: e.clientY + 8, content };
-  };
-  
-  root.onpointerout = (e) => {
-    if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return;
-    hideTooltip();
-  };
-  
-  root.onclick = async (e) => {
-    const el = e.target.closest('.marker');
-    if (!el) return;
-    let owner = (el.getAttribute('data-player') || '').replace(/^'+|'+$/g, '');
-    if (owner) {
-      try {
-        const { data } = await api.get(`/api/player/${encodeURIComponent(owner)}/villages`);
-        profileData.value = {
-          name: data.player || owner,
-          alliance: data.alliance || null,
-          villages: data.villages || [],
-          points: data.points || 0,
-          rank: data.rank || null
-        };
-        profileDialog.value = true;
-      } catch (err) {
-        console.error('Failed to load player data:', err);
-      }
-    }
-  };
-}
-
 function getClassValue(el, prefix) {
-  const c = Array.from(el.classList).find(x => x.startsWith(prefix));
-  return c ? c.slice(prefix.length) : '';
+  const c = Array.from(el.classList).find((x) => x.startsWith(prefix))
+  return c ? c.slice(prefix.length) : ''
 }
-
 function updateMarkersVisibility() {
-  if (!markersGroup.value) return;
+  if (!markersGroup.value) return
   const groupCheck = (type, val) => {
-    const checkbox = document.getElementById(`toggle${capitalize(type)}-${val}`);
-    return checkbox ? checkbox.checked !== false : true;
-  };
-  
-  markersGroup.value.querySelectorAll('.marker').forEach(node => {
-    const alliance = getClassValue(node, 'alliance-');
-    const region = getClassValue(node, 'region-');
-    const tribe = getClassValue(node, 'tribe-');
+    const checkbox = document.getElementById(`toggle${capitalize(type)}-${val}`)
+    return checkbox ? checkbox.checked !== false : true
+  }
+  markersGroup.value.querySelectorAll('.marker').forEach((node) => {
+    const alliance = getClassValue(node, 'alliance-')
+    const region = getClassValue(node, 'region-')
+    const tribe = getClassValue(node, 'tribe-')
     const on =
       masterVisible &&
       (alliance ? groupCheck('Alliance', alliance) : true) &&
       (region ? groupCheck('Region', region) : true) &&
-      (tribe ? groupCheck('Tribe', tribe) : true);
-    node.style.display = on ? 'block' : 'none';
-  });
+      (tribe ? groupCheck('Tribe', tribe) : true)
+    node.style.display = on ? 'block' : 'none'
+  })
 }
-
 function sanitize(html) {
   try {
-    if (window.DOMPurify?.sanitize) {
-      return window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true, svg: true } });
-    }
+    if (window.DOMPurify?.sanitize) return window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true, svg: true } })
   } catch {}
-  return String(html).replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
+  return String(html).replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
 }
+function bindMarkerEvents() {
+  const root = markersGroup.value
+  if (!root) return
 
-const DEFAULT_WORLD = { x: -400, y: -400, width: 800, height: 800 };
-
-function markersBBoxOrDefault() {
-  const g = markersGroup.value;
-  if (g) {
-    const bb = g.getBBox();
-    if (bb.width > 0 && bb.height > 0) return bb;
+  root.onpointerover = (e) => {
+    const el = e.target.closest('.marker')
+    if (!el) return
+    const tip = el.getAttribute('data-tooltip') || ''
+    tooltip.value = { show: true, x: e.clientX + 8, y: e.clientY + 8, content: sanitize(tip.replace(/<br>/g, '<br/>')) }
   }
-  return { ...DEFAULT_WORLD };
+  root.onpointerout = (e) => {
+    if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return
+    hideTooltip()
+  }
 }
 
-function unionBBox(a, b) {
-  const x = Math.min(a.x, b.x);
-  const y = Math.min(a.y, b.y);
-  const x2 = Math.max(a.x + a.width, b.x + b.width);
-  const y2 = Math.max(a.y + a.height, b.y + b.height);
-  return { x, y, width: x2 - x, height: y2 - y };
-}
-
-function fitToBBox(bbox, pad = 1.0) {
-  if (!bbox || bbox.width <= 0 || bbox.height <= 0) return;
-  if (!svg.value || !zoom) return;
-
-  syncZoomExtents();
-
-  const rect = svg.value.getBoundingClientRect();
-  const k = Math.min(rect.width / (bbox.width * pad), rect.height / (bbox.height * pad));
-  centerAt(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, k);
-}
-
-
-function centerAt(x, y, k = d3.zoomTransform(svg.value).k) {
-  if (!svg.value || !zoom) return;
-
-  syncZoomExtents();
-
-  const rect = svg.value.getBoundingClientRect();
-  const tx = rect.width / 2 - k * x;
-  const ty = rect.height / 2 - k * y;
-  const t = d3.zoomIdentity.translate(tx, ty).scale(k);
-  d3.select(svg.value).transition().duration(250).call(zoom.transform, t);
-}
-
-
+/* === Background sizing === */
 function layoutBackground() {
-  if (!bgMeta.loaded || bgMeta.w === 0 || bgMeta.h === 0) return;
-  const target = markersBBoxOrDefault();
-  const rImg = bgMeta.w / bgMeta.h;
-  const rBox = target.width / target.height;
-  
-  if (rImg >= rBox) {
-    const height = target.height;
-    const width = height * rImg;
-    const x = target.x + (target.width - width) / 2;
-    const y = target.y;
-    Object.assign(bgRect, { x, y, width, height });
-  } else {
-    const width = target.width;
-    const height = width / rImg;
-    const x = target.x;
-    const y = target.y + (target.height - height) / 2;
-    Object.assign(bgRect, { x, y, width, height });
-  }
-  
-  if (!initialFitted) {
-    initialFitted = true;
-    const all = unionBBox(markersBBoxOrDefault(), bgRect);
-    fitToBBox(all, 1.02);
-  }
+  syncMinimapBounds()
 }
 
-/* === Zoom helpers === */
-function zoomBy(factor) {
-  if (svg.value && zoom) {
-    d3.select(svg.value).transition().duration(200).call(zoom.scaleBy, factor);
-  }
-}
-
-function resetView() {
-  fitToContent();
-}
-
-function centerOnCoords() {
-  const [x, y] = [Number(gotoX.value) || 0, Number(gotoY.value) || 0];
-  centerAt(x, y);
-}
-
-const handleResize = () => {
-  if (!svg.value || !zoom) return;
-
-  const rect = svg.value.getBoundingClientRect();
-  if (!rect || rect.width <= 0 || rect.height <= 0) return;
-
-  syncZoomExtents();
-
-  const t = d3.zoomTransform(svg.value);
-  if (!Number.isFinite(t.x) || !Number.isFinite(t.y) || !Number.isFinite(t.k)) return;
-
-  d3.select(svg.value).call(zoom.transform, t);
-};
-
-
-
-
+/* === Context menu === */
 function onContextMenu(e) {
-  e.preventDefault();
-  const el = e.target.closest('.marker');
-  ctx.hasMarker = !!el;
-  ctx.marker = el;
-  
+  e.preventDefault()
+  const el = e.target.closest('.marker')
+  ctx.hasMarker = !!el
+  ctx.marker = el
+
   if (el) {
-    const bb = el.getBBox();
-    ctx.point = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
+    const bb = el.getBBox()
+    ctx.point = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 }
   } else {
-    const rect = svg.value.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const transform = d3.zoomTransform(svg.value);
-    ctx.point = {
-      x: (x - transform.x) / transform.k,
-      y: (y - transform.y) / transform.k
-    };
+    const rect = svg.value.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const transform = d3.zoomTransform(svg.value)
+    ctx.point = { x: (x - transform.x) / transform.k, y: (y - transform.y) / transform.k }
   }
-  
-  // Set context menu position and show it
-  contextPosition.value = { x: e.clientX, y: e.clientY };
-  showContextMenu.value = true;
-  
-  // Prevent any zoom behavior
-  if (e.type === 'dblclick') {
-    e.stopPropagation();
-    return false;
-  }
-  
-  return false;
+  contextPosition.value = { x: e.clientX, y: e.clientY }
+  showContextMenu.value = true
+  return false
 }
-
-
-
 function copyCoordinates() {
-if (!ctx.point) return;
-const x = Math.round(ctx.point.x);
-const y = Math.round(ctx.point.y);
-const coordText = `${x}|${y}`;
-navigator.clipboard.writeText(coordText).then(() => {
-$q.notify({
-message: 'Coordinates copied to clipboard!',
-color: 'positive',
-position: 'top',
-timeout: 1000
-});
-});
+  if (!ctx.point) return
+  const x = Math.round(ctx.point.x)
+  const y = Math.round(-ctx.point.y)
+  navigator.clipboard.writeText(`${x}|${y}`).then(() => {
+    $q.notify({ message: 'Coordinates copied!', color: 'positive', position: 'top', timeout: 900 })
+  })
+}
+function centerOnContext() {
+  if (!ctx.point) return
+  centerAt(ctx.point.x, ctx.point.y)
+}
+function hideTooltip() {
+  tooltip.value.show = false
 }
 
-const startMeasuring = () => {
-if (!ctx.point) return;
-drawMode.value = 'measure';
-const point = ctx.point;
+/* === Draw controls === */
+let previewElem = null
+let anchor = null
+let isDrawing = false
 
-// Clear any existing preview
-previewLayer.value.innerHTML = '';
-
-// Create a preview line
-const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-line.setAttribute('x1', point.x);
-line.setAttribute('y1', point.y);
-line.setAttribute('x2', point.x);
-line.setAttribute('y2', point.y);
-line.setAttribute('stroke', 'red');
-line.setAttribute('stroke-width', '0.1');
-line.setAttribute('stroke-dasharray', '0.2,0.2');
-
-previewLayer.value.appendChild(line);
-
-// Update the preview on mouse move
-const onMouseMove = (e) => {
-const pt = toMapCoords(e);
-line.setAttribute('x2', pt.x);
-line.setAttribute('y2', pt.y);
-};
-
-// Clean up on next click
-const onClick = (e) => {
-svg.value.removeEventListener('mousemove', onMouseMove);
-svg.value.removeEventListener('click', onClick);
-previewLayer.value.removeChild(line);
-drawMode.value = null;
-};
-
-svg.value.addEventListener('mousemove', onMouseMove);
-svg.value.addEventListener('click', onClick, { once: true });
-};
-
-const addMarkerAtPoint = () => {
-if (!ctx.point) return;
-
-// You can customize this to show a dialog for marker details
-$q.dialog({
-title: 'Add Marker',
-message: 'Enter marker name:',
-prompt: {
-model: '',
-type: 'text',
-isValid: val => val.length > 0,
-label: 'Marker name',
-hint: 'Enter a name for this marker'
-},
-cancel: true,
-persistent: true
-}).onOk(name => {
-// Here you would typically add the marker to your markers array
-// and save it to your backend or local storage
-$q.notify({
-message: `Marker "${name}" added at (${Math.round(ctx.point.x)}|${Math.round(ctx.point.y)})`,
-color: 'positive',
-position: 'top',
-timeout: 2000
-});
-
-// TODO: Add the actual marker to your markers array and save it
-// This is a placeholder for the actual implementation
-});
-};
-
-const showVillageInfo = () => {
-if (!ctx.hasMarker || !ctx.marker) return;
-
-// Extract village info from the marker
-const villageInfo = {
-name: ctx.marker.getAttribute('data-name') || 'Unknown Village',
-x: Math.round(parseFloat(ctx.marker.getAttribute('data-x'))),
-y: Math.round(parseFloat(ctx.marker.getAttribute('data-y'))),
-// Add more info as needed from your marker data attributes
-};
-
-$q.dialog({
-title: 'Village Information',
-message: `
-<div class="text-h6">${villageInfo.name}</div>
-<div>Coordinates: ${villageInfo.x}|${villageInfo.y}</div>
-<div>Player: ${ctx.marker.getAttribute('data-player') || 'Unknown'}</div>
-<div>Alliance: ${ctx.marker.getAttribute('data-alliance') || 'None'}</div>
-`,
-html: true,
-style: 'min-width: 300px;',
-ok: {
-label: 'Close',
-flat: true
-},
-cancel: false
-});
-};
-
-/* === Pointer handlers === */
-let previewElem = null;
-let anchor = null;
-let isDrawing = false;
-
+function setDrawMode(mode) {
+  drawMode.value = mode
+  if (drawMode.value !== 'measure') {
+    anchor = null
+    isDrawing = false
+    if (previewElem) {
+      try { previewElem.remove() } catch {}
+      previewElem = null
+    }
+  }
+}
+function toggleMeasureMode() {
+  drawMode.value = drawMode.value === 'measure' ? null : 'measure'
+  if (drawMode.value !== 'measure') {
+    anchor = null
+    isDrawing = false
+    if (previewElem) {
+      try { previewElem.remove() } catch {}
+      previewElem = null
+    }
+  }
+}
 function toMapCoords(evt) {
-  if (!svg.value) return { x: 0, y: 0 };
-  const [sx, sy] = d3.pointer(evt, svg.value);
-  const t = d3.zoomTransform(svg.value);
-  return { x: t.invertX(sx), y: t.invertY(sy) };
+  if (!svg.value) return { x: 0, y: 0 }
+  const [sx, sy] = d3.pointer(evt, svg.value)
+  const t = d3.zoomTransform(svg.value)
+  return { x: t.invertX(sx), y: t.invertY(sy) }
 }
-
-const snap = (v) => (snapToGrid.value ? Math.round(v / gridSize.value) * gridSize.value : v);
-
+const snap = (v) => (snapToGrid.value ? Math.round(v / gridSize.value) * gridSize.value : v)
 function applyPreviewStyle(el) {
-  el.setAttribute('stroke', drawColor.value);
-  el.setAttribute('stroke-width', drawWidth.value);
-  if (['rect', 'circle'].includes(drawMode.value)) el.setAttribute('fill', drawColor.value + '33');
-  else el.setAttribute('fill', 'none');
+  el.setAttribute('stroke', drawColor.value)
+  el.setAttribute('stroke-width', drawWidth.value)
+  if (['rect', 'circle'].includes(drawMode.value)) el.setAttribute('fill', drawColor.value + '33')
+  else el.setAttribute('fill', 'none')
   if (el.tagName === 'path') {
-    el.setAttribute('stroke-linecap', 'round');
-    el.setAttribute('stroke-linejoin', 'round');
+    el.setAttribute('stroke-linecap', 'round')
+    el.setAttribute('stroke-linejoin', 'round')
   }
 }
-
 function onPointerDown(evt) {
-  const p = toMapCoords(evt);
-  cursor.value = p;
-  
-  if (!drawMode.value) return;
-  evt.preventDefault();
-  
-  const pt = { x: snap(p.x), y: snap(p.y) };
-  
-  if (drawMode.value === 'text') {
-    const txt = prompt('Enter text:');
-    if (txt) {
-      drawings.value.push({
-        type: 'text', x: pt.x, y: pt.y, text: txt,
-        style: { stroke: drawColor.value, 'stroke-width': drawWidth.value, fill: 'none' }
-      });
-      pushHistory(); saveToLocal();
-    }
-    return;
-  }
-  
-  if (drawMode.value === 'measure') {
-    if (!anchor) { anchor = pt; isDrawing = true } else {
-      const dist = Math.hypot(pt.x - anchor.x, pt.y - anchor.y);
-      drawings.value.push({
-        type: 'measure',
-        x1: anchor.x, y1: anchor.y, x2: pt.x, y2: pt.y,
-        distance: dist,
-        style: { stroke: '#00bcd4', 'stroke-width': 1.5, 'stroke-dasharray': '2 2', fill: 'none' }
-      });
-      pushHistory(); saveToLocal();
-      anchor = null; isDrawing = false;
-      if (previewElem) { previewLayer.value.removeChild(previewElem); previewElem = null }
-    }
-    return;
-  }
-  
-  isDrawing = true;
-  anchor = pt;
-  const ns = 'http://www.w3.org/2000/svg';
-  if (drawMode.value === 'line') {
-    previewElem = document.createElementNS(ns, 'line');
-    previewElem.setAttribute('x1', pt.x);
-    previewElem.setAttribute('y1', pt.y);
-    previewElem.setAttribute('x2', pt.x);
-    previewElem.setAttribute('y2', pt.y);
-  } else if (drawMode.value === 'rect') {
-    previewElem = document.createElementNS(ns, 'rect');
-    previewElem.setAttribute('x', pt.x);
-    previewElem.setAttribute('y', pt.y);
-    previewElem.setAttribute('width', 0);
-    previewElem.setAttribute('height', 0);
-  } else if (drawMode.value === 'circle') {
-    previewElem = document.createElementNS(ns, 'circle');
-    previewElem.setAttribute('cx', pt.x);
-    previewElem.setAttribute('cy', pt.y);
-    previewElem.setAttribute('r', 0);
-  } else if (drawMode.value === 'path') {
-    previewElem = document.createElementNS(ns, 'path');
-    previewElem.setAttribute('d', `M${pt.x},${pt.y}`);
-  }
-  applyPreviewStyle(previewElem);
-  previewLayer.value.appendChild(previewElem);
-}
+  const p = toMapCoords(evt)
+  cursor.value = p
+  if (!drawMode.value) return
 
+  evt.preventDefault()
+  const pt = { x: snap(p.x), y: snap(p.y) }
+
+  if (drawMode.value === 'text') {
+    const txt = prompt('Enter text:')
+    if (txt) {
+      drawings.value.push({ type: 'text', x: pt.x, y: pt.y, text: txt, style: { stroke: drawColor.value, 'stroke-width': drawWidth.value, fill: 'none' } })
+      pushHistory()
+      saveToLocal()
+    }
+    return
+  }
+
+  if (drawMode.value === 'measure') {
+    if (!anchor) {
+      anchor = pt
+      isDrawing = true
+    } else {
+      const dist = Math.hypot(pt.x - anchor.x, pt.y - anchor.y)
+      drawings.value.push({ type: 'measure', x1: anchor.x, y1: anchor.y, x2: pt.x, y2: pt.y, distance: dist, style: { stroke: '#00bcd4', 'stroke-width': 1.5, 'stroke-dasharray': '2 2', fill: 'none' } })
+      pushHistory()
+      saveToLocal()
+      anchor = null
+      isDrawing = false
+      if (previewElem) {
+        previewLayer.value.removeChild(previewElem)
+        previewElem = null
+      }
+    }
+    return
+  }
+
+  isDrawing = true
+  anchor = pt
+  const ns = 'http://www.w3.org/2000/svg'
+
+  if (drawMode.value === 'line') {
+    previewElem = document.createElementNS(ns, 'line')
+    previewElem.setAttribute('x1', pt.x)
+    previewElem.setAttribute('y1', pt.y)
+    previewElem.setAttribute('x2', pt.x)
+    previewElem.setAttribute('y2', pt.y)
+  } else if (drawMode.value === 'rect') {
+    previewElem = document.createElementNS(ns, 'rect')
+    previewElem.setAttribute('x', pt.x)
+    previewElem.setAttribute('y', pt.y)
+    previewElem.setAttribute('width', 0)
+    previewElem.setAttribute('height', 0)
+  } else if (drawMode.value === 'circle') {
+    previewElem = document.createElementNS(ns, 'circle')
+    previewElem.setAttribute('cx', pt.x)
+    previewElem.setAttribute('cy', pt.y)
+    previewElem.setAttribute('r', 0)
+  } else if (drawMode.value === 'path') {
+    previewElem = document.createElementNS(ns, 'path')
+    previewElem.setAttribute('d', `M${pt.x},${pt.y}`)
+  }
+
+  applyPreviewStyle(previewElem)
+  previewLayer.value.appendChild(previewElem)
+}
 function onPointerMove(evt) {
-  const p = toMapCoords(evt);
-  cursor.value = p;
-  
-  if (!isDrawing || !previewElem) return;
-  evt.preventDefault();
-  const pt = { x: snap(p.x), y: snap(p.y) };
-  
+  const p = toMapCoords(evt)
+  cursor.value = p
+  updateViewWorldAndRulers()
+
+  if (!isDrawing || !previewElem) return
+  evt.preventDefault()
+  const pt = { x: snap(p.x), y: snap(p.y) }
+
   switch (drawMode.value) {
     case 'line':
-      previewElem.setAttribute('x2', pt.x);
-      previewElem.setAttribute('y2', pt.y);
-      break;
+      previewElem.setAttribute('x2', pt.x)
+      previewElem.setAttribute('y2', pt.y)
+      break
     case 'rect': {
-      const x = Math.min(anchor.x, pt.x); const y = Math.min(anchor.y, pt.y);
-      const w = Math.abs(pt.x - anchor.x); const h = Math.abs(pt.y - anchor.y);
-      previewElem.setAttribute('x', x); previewElem.setAttribute('y', y);
-      previewElem.setAttribute('width', w); previewElem.setAttribute('height', h);
-      break;
+      const x = Math.min(anchor.x, pt.x)
+      const y = Math.min(anchor.y, pt.y)
+      const w = Math.abs(pt.x - anchor.x)
+      const h = Math.abs(pt.y - anchor.y)
+      previewElem.setAttribute('x', x)
+      previewElem.setAttribute('y', y)
+      previewElem.setAttribute('width', w)
+      previewElem.setAttribute('height', h)
+      break
     }
     case 'circle': {
-      const r = Math.hypot(pt.x - anchor.x, pt.y - anchor.y);
-      previewElem.setAttribute('r', r);
-      break;
+      const r = Math.hypot(pt.x - anchor.x, pt.y - anchor.y)
+      previewElem.setAttribute('r', r)
+      break
     }
     case 'path': {
-      const d = previewElem.getAttribute('d') + ` L${pt.x},${pt.y}`;
-      previewElem.setAttribute('d', d);
-      break;
-    }
-    case 'measure': {
-      previewElem?.remove();
-      const ns = 'http://www.w3.org/2000/svg';
-      previewElem = document.createElementNS(ns, 'line');
-      previewElem.setAttribute('x1', anchor.x);
-      previewElem.setAttribute('y1', anchor.y);
-      previewElem.setAttribute('x2', pt.x);
-      previewElem.setAttribute('y2', pt.y);
-      previewElem.setAttribute('stroke', '#00bcd4');
-      previewElem.setAttribute('stroke-width', 1);
-      previewElem.setAttribute('stroke-dasharray', '2 2');
-      previewElem.setAttribute('fill', 'none');
-      previewLayer.value.appendChild(previewElem);
-      break;
+      previewElem.setAttribute('d', previewElem.getAttribute('d') + ` L${pt.x},${pt.y}`)
+      break
     }
   }
 }
-
 function onPointerUp(evt) {
-  if (!isDrawing || !previewElem || drawMode.value === 'measure') return;
-  evt.preventDefault();
-  const finalize = (shape) => { drawings.value.push(shape); pushHistory(); saveToLocal() };
-  const color = drawColor.value; const width = drawWidth.value;
-  
+  if (!isDrawing || !previewElem || drawMode.value === 'measure') return
+  evt.preventDefault()
+
+  const finalize = (shape) => {
+    drawings.value.push(shape)
+    pushHistory()
+    saveToLocal()
+  }
+  const color = drawColor.value
+  const width = drawWidth.value
+
   if (drawMode.value === 'line') {
-    finalize({
-      type: 'line',
-      x1: +previewElem.getAttribute('x1'), y1: +previewElem.getAttribute('y1'),
-      x2: +previewElem.getAttribute('x2'), y2: +previewElem.getAttribute('y2'),
-      style: { stroke: color, 'stroke-width': width, fill: 'none' }
-    });
+    finalize({ type: 'line', x1: +previewElem.getAttribute('x1'), y1: +previewElem.getAttribute('y1'), x2: +previewElem.getAttribute('x2'), y2: +previewElem.getAttribute('y2'), style: { stroke: color, 'stroke-width': width, fill: 'none' } })
   } else if (drawMode.value === 'rect') {
-    finalize({
-      type: 'rect',
-      x: +previewElem.getAttribute('x'), y: +previewElem.getAttribute('y'),
-      width: +previewElem.getAttribute('width'), height: +previewElem.getAttribute('height'),
-      style: { stroke: color, 'stroke-width': width, fill: color + '33' }
-    });
+    finalize({ type: 'rect', x: +previewElem.getAttribute('x'), y: +previewElem.getAttribute('y'), width: +previewElem.getAttribute('width'), height: +previewElem.getAttribute('height'), style: { stroke: color, 'stroke-width': width, fill: color + '33' } })
   } else if (drawMode.value === 'circle') {
-    finalize({
-      type: 'circle',
-      cx: +previewElem.getAttribute('cx'), cy: +previewElem.getAttribute('cy'),
-      r: +previewElem.getAttribute('r'),
-      style: { stroke: color, 'stroke-width': width, fill: color + '33' }
-    });
+    finalize({ type: 'circle', cx: +previewElem.getAttribute('cx'), cy: +previewElem.getAttribute('cy'), r: +previewElem.getAttribute('r'), style: { stroke: color, 'stroke-width': width, fill: color + '33' } })
   } else if (drawMode.value === 'path') {
-    finalize({
-      type: 'path',
-      d: previewElem.getAttribute('d'),
-      style: { stroke: color, 'stroke-width': width, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }
-    });
+    finalize({ type: 'path', d: previewElem.getAttribute('d'), style: { stroke: color, 'stroke-width': width, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' } })
   }
-  
-  previewLayer.value.removeChild(previewElem);
-  previewElem = null;
-  isDrawing = false;
-  anchor = null;
+
+  previewLayer.value.removeChild(previewElem)
+  previewElem = null
+  isDrawing = false
+  anchor = null
 }
 
+/* === Keybinds === */
 function onKeydown(evt) {
-  if ((evt.ctrlKey || evt.metaKey) && !evt.shiftKey && evt.key === 'z') { undo(); evt.preventDefault(); }
-  else if ((evt.ctrlKey || evt.metaKey) && (evt.key === 'y' || (evt.shiftKey && evt.key === 'Z'))) { redo(); evt.preventDefault(); }
-  else if (evt.key === 'Escape') {
-    drawMode.value = null;
-    previewElem?.remove(); previewElem = null;
-    isDrawing = false; anchor = null;
+  if ((evt.ctrlKey || evt.metaKey) && !evt.shiftKey && evt.key === 'z') {
+    undo()
+    evt.preventDefault()
+  } else if ((evt.ctrlKey || evt.metaKey) && (evt.key === 'y' || (evt.shiftKey && evt.key === 'Z'))) {
+    redo()
+    evt.preventDefault()
+  } else if (evt.key === 'Escape') {
+    drawMode.value = null
+    previewElem?.remove()
+    previewElem = null
+    isDrawing = false
+    anchor = null
+  } else if (evt.key.toLowerCase() === 'f') {
+    toggleFullscreen()
   }
 }
 
+/* === Resize handling === */
+function setupResizeObservers() {
+  window.addEventListener('resize', scheduleResizeRefresh)
 
-
-function centerOnContext() {
-  if (!ctx.value?.point) return;
-  centerAt(ctx.value.point.x, ctx.value.point.y);
+  const target = squareEl.value || stageEl.value || svg.value
+  if (!target || typeof ResizeObserver === 'undefined') return
+  resizeObserver = new ResizeObserver(() => {
+    scheduleResizeRefresh()
+    setInitialCenteredViewIfPossible()
+  })
+  resizeObserver.observe(target)
 }
-
-
-function hideTooltip() {
-  tooltip.value.show = false;
-}
-
-
-function syncZoomExtents() {
-  if (!svg.value || !zoom) return;
-
-  const r = svg.value.getBoundingClientRect();
-  if (!r || r.width <= 0 || r.height <= 0) return;
-
-  // Tell D3 what the visible pixel extent is (prevents 0×0 extent bugs)
-  zoom.extent([[0, 0], [r.width, r.height]]);
-
-  // Optional but recommended: keep panning bounded to your huge world rect
-  zoom.translateExtent([[-100000, -100000], [100000, 100000]]);
-}
-
 
 /* === Lifecycle === */
 onMounted(async () => {
-  window.addEventListener('keydown', onKeydown);
-  await nextTick();
-  
+  lockPageScroll()
+  window.addEventListener('keydown', onKeydown)
+
+  await nextTick()
+
   if (svg.value) {
-    // Initialize d3 zoom
-    zoom = d3.zoom()
-  .scaleExtent([0.1, 50])
-  .on('zoom', (event) => {
-    const { transform } = event;
+    zoom = d3
+      .zoom()
+      .scaleExtent([MIN_ZOOM_K, MAX_ZOOM_K])
+      .on('zoom', (event) => {
+        const { transform } = event
+        if (!Number.isFinite(transform.x) || !Number.isFinite(transform.y) || !Number.isFinite(transform.k)) return
+        d3.select(svg.value).select('#viewport').attr('transform', transform)
+        zoomK.value = transform.k
+        syncSliderFromZoom()
+        updateViewWorldAndRulers()
+      })
 
-    if (!Number.isFinite(transform.x) || !Number.isFinite(transform.y) || !Number.isFinite(transform.k)) return;
-
-    d3.select(svg.value).select('#viewport').attr('transform', transform);
-    zoomK.value = transform.k;
-  });
-
-syncZoomExtents();
-
-d3.select(svg.value)
-  .call(zoom)
-  .on('dblclick.zoom', null);
-
-    
-    // Initial transform - center and scale to show content
-    const svgRect = svg.value.getBoundingClientRect();
-    if (svgRect.width > 0 && svgRect.height > 0) {
-      const defaultScale = Math.min(svgRect.width, svgRect.height) / 2000;
-      const initialTransform = d3.zoomIdentity
-        .translate(svgRect.width / 2, svgRect.height / 2)
-        .scale(defaultScale);
-      d3.select(svg.value).call(zoom.transform, initialTransform);
-    }
-    
-    window.addEventListener('resize', handleResize);
+    syncZoomExtents()
+    d3.select(svg.value).call(zoom).on('dblclick.zoom', null)
   }
-  
+
+  setupResizeObservers()
+
+  syncMinimapBounds()
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      setInitialCenteredViewIfPossible()
+      scheduleResizeRefresh()
+    })
+  })
+
   handleCheckboxChange = (e) => {
-    const t = e.target;
-    if (!t) return;
-    if (
-      t.classList.contains('alliance-checkbox') ||
-      t.classList.contains('tribe-checkbox') ||
-      t.classList.contains('region-checkbox') // if you have regions too
-    ) {
-      updateMarkersVisibility();
+    const t = e.target
+    if (!t) return
+    if (t.classList.contains('alliance-checkbox') || t.classList.contains('tribe-checkbox') || t.classList.contains('region-checkbox')) {
+      updateMarkersVisibility()
     }
-  };
-  document.addEventListener('change', handleCheckboxChange);
-
-
-  // Load drawings
-  loadFromLocal();
-  if (history.value.length === 0) pushHistory();
-  
-  // Load markers
-  await reloadMarkers();
-
-
-// ---- DEBUG HOOKS (remove later) ----
-window.__mapDbg = {
-  get svg() { return svg.value; },
-  get viewport() { return svg.value?.querySelector('#viewport'); },
-  get markersLayer() { return svg.value?.querySelector('#markersLayer'); },
-  get markersGroup() { return markersGroup.value; },
-  get markersHtml() { return markers.value; },
-  get zoomTransform() { return svg.value ? d3.zoomTransform(svg.value) : null; },
-  fitToContent,
-  syncZoomExtents,
-  updateMarkersVisibility,
-  reloadMarkers,
-  dump() {
-    const s = svg.value;
-    const vp = s?.querySelector('#viewport');
-    const ml = s?.querySelector('#markersLayer');
-    const mg = markersGroup.value;
-
-    console.log('--- MAP DBG ---');
-    console.log('svg:', s);
-    console.log('svg rect:', s?.getBoundingClientRect());
-    console.log('viewport:', vp, 'transform attr:', vp?.getAttribute('transform'));
-    console.log('d3 transform:', s ? d3.zoomTransform(s) : null);
-    console.log('markers string length:', (markers.value || '').length);
-    console.log('markersLayer children:', ml?.childNodes?.length, 'markersGroup children:', mg?.childNodes?.length);
-    console.log('.marker count:', mg?.querySelectorAll?.('.marker')?.length);
-    console.log('first 300 chars markers:', (markers.value || '').slice(0, 300));
-    if (mg) {
-      const bb = safeBBox(mg);
-      console.log('markersGroup bbox:', bb);
-    }
-    console.log('--- END DBG ---');
   }
-};
+  document.addEventListener('change', handleCheckboxChange)
 
-function safeBBox(node) {
-  try { return node.getBBox(); } catch (e) { return { error: String(e) }; }
-}
+  loadFromLocal()
+  if (history.value.length === 0) pushHistory()
 
+  await reloadMarkers()
+  await nextTick()
 
-await nextTick();
-
-// Wait 1 frame so splitter/layout settles (prevents 0×0 extent on first fit)
-requestAnimationFrame(() => {
-  syncZoomExtents();
-  fitToContent();
-});
-
-  // Load background image
-  const img = new Image();
+  const img = new Image()
   img.onload = () => {
-    const w = img.naturalWidth;
-    const h = img.naturalHeight;
-    
+    const w = img.naturalWidth
+    const h = img.naturalHeight
     if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
-      bgMeta.w = w;
-      bgMeta.h = h;
-      bgMeta.loaded = true;
-      
-      // Center in world coords
-      bgRect.x = -w / 2;
-      bgRect.y = -h / 2;
-      bgRect.width = w;
-      bgRect.height = h;
-      
-      // Layout background and fit
-      layoutBackground();
-      if (!initialFitted) {
-        setTimeout(() => {
-          fitToContent();
-          initialFitted = true;
-        }, 100);
-      }
+      bgMeta.w = w
+      bgMeta.h = h
+      bgMeta.loaded = true
+      bgRect.x = -w / 2
+      bgRect.y = -h / 2
+      bgRect.width = w
+      bgRect.height = h
+      layoutBackground()
+      rebuildMinimapPoints()
+      scheduleResizeRefresh()
     }
-  };
+  }
   img.onerror = () => {
-    console.warn('Background image failed to load; using defaults');
-    bgMeta.w = 800;
-    bgMeta.h = 800;
-    bgMeta.loaded = true;
-    bgRect.x = -400;
-    bgRect.y = -400;
-    bgRect.width = 800;
-    bgRect.height = 800;
-    
-    setTimeout(() => {
-      fitToContent();
-    }, 100);
-  };
-    // IMPORTANT: trigger load
-    img.src = '/background.png';
-});
+    bgMeta.w = MAP_WORLD.width
+    bgMeta.h = MAP_WORLD.height
+    bgMeta.loaded = true
+    bgRect.x = MAP_WORLD.x
+    bgRect.y = MAP_WORLD.y
+    bgRect.width = MAP_WORLD.width
+    bgRect.height = MAP_WORLD.height
+    syncMinimapBounds()
+    scheduleResizeRefresh()
+  }
+  img.src = '/background.png'
+})
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', handleResize);
-  window.removeEventListener('keydown', onKeydown);
-  if (handleCheckboxChange) {
-    document.removeEventListener('change', handleCheckboxChange);
-    handleCheckboxChange = null;
+  unlockPageScroll()
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('resize', scheduleResizeRefresh)
+  if (handleCheckboxChange) document.removeEventListener('change', handleCheckboxChange)
+  if (resizeObserver) {
+    try { resizeObserver.disconnect() } catch {}
+    resizeObserver = null
   }
-});
+  cancelAnimationFrame(resizeRaf)
+})
 
-// Watch for filter changes
-watch(groupFilters, (v) => {
-  Object.keys(v).forEach(grp => filterGroup(grp));
-}, { deep: true });
-
+watch(
+  groupFilters,
+  (v) => {
+    Object.keys(v).forEach((grp) => filterGroup(grp))
+  },
+  { deep: true }
+)
 </script>
 
 <style scoped>
-
-/* Force the q-page to have a real height */
-.q-page {
-  min-height: 100vh !important;
-}
-
-/* Force the splitter to have a real height */
-.q-splitter.fit {
+.map-page {
   height: 100vh !important;
+  overflow: hidden !important;
 }
-
-/* Force the right panel (map) to have a real height */
-.map-column {
+.map-splitter {
   height: 100vh !important;
-  min-height: 0 !important;
+  overflow: hidden !important;
 }
-
-/* Force the svg container to take available height */
-.svg-container {
-  flex: 1;
-  min-height: 0 !important;
-}
-
-/* Make the SVG fill it */
-#svgMap {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-
 .panel {
   height: 100%;
   overflow-y: auto;
   background: #0d0d0d;
   color: #eaeaea;
 }
-
 .map-column {
-  flex: 1;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
   background: #000;
-  min-width: 0;
-  overflow: hidden;
-  height: 100%;
 }
-
-.map-controls {
-  position: absolute;
-  right: 20px;
-  top: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 10000;
-  background: rgba(13, 13, 13, 0.9);
-  border-radius: 24px;
-  padding: 12px 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  /* Force hardware acceleration */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  -moz-transform: translateZ(0);
-  -ms-transform: translateZ(0);
-}
-
-.map-controls .q-btn {
-  margin: 0;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  width: 36px;
-  height: 36px;
-  font-size: 16px;
-  transition: all 0.2s ease;
-}
-
-.map-controls .q-btn:hover {
-  background: var(--q-primary);
-  transform: scale(1.1);
-}
-
-.map-controls .q-btn i {
-  font-size: 16px;
-}
-
-.map-controls .q-btn.active {
-  background: var(--q-primary);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
-}
-
-/* Make sure tooltips are visible */
-.map-controls .q-tooltip {
-  font-size: 12px;
-  padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.9);
-  color: white;
-  border-radius: 4px;
-  pointer-events: none;
-  z-index: 2000;
-}
-
-.svg-container { 
+.map-stage {
   flex: 1;
-  width: 100%; 
-  position: relative; 
-  background: #000; 
+  min-height: 0;
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 0;
+}
+.svg-square {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  margin: auto;
+  background: #000;
+  border-radius: 14px;
   overflow: hidden;
-  /* Ensure proper stacking context */
-  z-index: 1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+#svgMap {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
-.svg-container svg { 
-  position: absolute; 
-  top: 0;
-  left: 0;
-  width: 100%; 
-  height: 100%; 
-  background: #000; 
+/* Top HUD */
+.map-hud {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  z-index: 10001;
+  pointer-events: none;
 }
+.map-hud__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  border-radius: 14px;
+  padding: 10px;
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+  overflow-x: auto;
+}
+.map-hud__row::-webkit-scrollbar { height: 8px; }
+.map-hud__jump { width: 260px; max-width: 46vw; flex: 0 0 auto; }
+.map-hud__zoom { display: flex; align-items: center; gap: 8px; min-width: 270px; flex: 0 0 auto; }
+.map-hud__slider { width: 160px; }
+.map-hud__zoomtext { width: 56px; text-align: right; font-size: 12px; opacity: 0.9; color: rgba(0, 0, 0, 0.85); }
+.map-hud__row .is-active { background: rgba(0, 0, 0, 0.08); border-radius: 999px; }
 
-/* Tooltip on dark bg */
+/* Draw panel */
+.draw-panel {
+  position: absolute;
+  right: 14px;
+  top: 40%;
+  transform: translateY(-50%);
+  z-index: 10002;
+  pointer-events: none;
+}
+.draw-panel--mobile {
+  right: 12px;
+  top: auto;
+  bottom: 92px;
+  transform: none;
+}
+.draw-panel__card {
+  pointer-events: auto;
+  width: 280px;
+  background: rgba(15, 15, 15, 0.90);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.6);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.draw-panel__head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 8px; }
+.draw-panel__title { display: flex; align-items: center; color: rgba(255, 255, 255, 0.92); font-size: 13px; font-weight: 700; letter-spacing: 0.2px; }
+.draw-panel__iconbtn { color: rgba(255, 255, 255, 0.9); background: rgba(255, 255, 255, 0.06); border-radius: 10px; }
+.draw-panel__body { padding: 10px; display: grid; gap: 10px; }
+.draw-panel__section { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 12px; padding: 10px; }
+.draw-panel__label { color: rgba(255, 255, 255, 0.78); font-size: 11px; font-weight: 700; letter-spacing: 0.25px; text-transform: uppercase; margin-bottom: 8px; }
+.draw-panel__row { display: flex; align-items: center; gap: 10px; }
+.draw-panel__modes { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.draw-panel__modebtn { height: 36px; border-radius: 12px; color: rgba(255, 255, 255, 0.92); background: rgba(255, 255, 255, 0.06); }
+.draw-panel__modebtn.is-active { background: rgba(0, 188, 212, 0.22); outline: 1px solid rgba(0, 188, 212, 0.55); }
+.draw-panel__actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.draw-panel__actionbtn { height: 36px; border-radius: 12px; color: rgba(255, 255, 255, 0.92); background: rgba(255, 255, 255, 0.06); }
+.draw-panel__actionbtn.is-active { background: rgba(0, 188, 212, 0.20); outline: 1px solid rgba(0, 188, 212, 0.45); }
+.draw-panel__pill { height: 28px; border-radius: 999px; padding: 0 10px; color: rgba(255, 255, 255, 0.92); background: rgba(255, 255, 255, 0.06); }
+.draw-panel__pill.is-active { background: rgba(255, 255, 255, 0.14); outline: 1px solid rgba(255, 255, 255, 0.18); }
+.draw-panel__swatches { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: 150px; }
+.swatch { width: 18px; height: 18px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.18); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); cursor: pointer; }
+.swatch.is-active { outline: 2px solid rgba(255, 255, 255, 0.75); outline-offset: 2px; }
+.draw-panel__widths { display: flex; gap: 6px; }
+.draw-panel__menu { background: #101010; color: #fff; }
+
+/* Tooltip */
 .tooltip {
   position: fixed;
   pointer-events: none;
   background: rgba(0, 0, 0, 0.9);
   color: #fff;
   padding: 6px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 0.8rem;
   white-space: nowrap;
   z-index: 1000;
   border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* Labels */
-.coord-label {
-  fill: #bbb;
-  font-size: 11px;
-  user-select: none;
 }
 
 /* Statusbar */
@@ -1648,17 +2195,9 @@ watch(groupFilters, (v) => {
   z-index: 2;
 }
 
-/* FAB */
-.fab {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  z-index: 5;
-}
-
-.fab-mobile {
-  bottom: 80px;
-}
+/* Markers */
+:deep(.marker) { cursor: pointer; transition: filter 120ms ease, opacity 120ms ease; }
+:deep(.marker:hover) { filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.35)); }
 
 /* Measure label */
 .measure-label {
@@ -1668,52 +2207,51 @@ watch(groupFilters, (v) => {
   fill: #fff;
 }
 
-/* Mobile adjustments */
-@media (max-width: 599px) {
-  .fab {
-    right: 8px;
-    bottom: 8px;
-  }
-  
-  .fab-mobile {
-    bottom: 72px;
-  }
-  
-  .statusbar {
-    font-size: 0.8rem;
-  }
+/* Minimap */
+.minimap {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 260px;
+  border-radius: 14px;
+  background: rgba(15, 15, 15, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
+  z-index: 10003;
+  padding: 10px;
 }
-
-/* Ensure the drawer takes full height on mobile */
-.q-drawer {
-  height: 100vh !important;
-  margin-top: 0 !important;
-  will-change: transform;
-}
-
-/* Fix for Quasar drawer positioning */
-.q-drawer-container {
-  overflow: hidden;
-  position: relative;
-  height: 100%;
-}
-
-/* Ensure the map takes full available space */
-#svgMap {
+.minimap__header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.minimap__title { font-size: 12px; color: rgba(255, 255, 255, 0.92); letter-spacing: 0.2px; font-weight: 600; }
+.minimap__actions { margin-left: auto; display: flex; gap: 2px; }
+.minimap__actions :deep(.q-btn) { color: rgba(255, 255, 255, 0.92); background: rgba(255, 255, 255, 0.06); border-radius: 10px; }
+.minimap__svg {
   width: 100%;
-  height: 100%;
+  height: 170px;
   display: block;
-}
-
-/* Fix for the mobile dialog */
-.q-dialog__inner > div {
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Ensure the map container doesn't scroll the page */
-body.body--has-drawer {
+  border-radius: 12px;
   overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+  outline: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: grab;
+}
+.minimap__svg:active { cursor: grabbing; }
+.minimap__viewport { vector-effect: non-scaling-stroke; }
+.minimap__footer { margin-top: 8px; display: grid; gap: 2px; }
+.minimap__line { font-size: 12px; color: rgba(255, 255, 255, 0.9); }
+.minimap__muted { color: rgba(255, 255, 255, 0.65); margin-left: 6px; }
+
+/* Mobile tweaks */
+@media (max-width: 599px) {
+  .map-hud__jump { width: 210px; max-width: 55vw; }
+  .map-hud__zoom { display: none; }
+  .minimap { width: 210px; }
+  .minimap__svg { height: 140px; }
+  .draw-panel__card { width: 260px; }
+}
+
+/* Global scroll lock class */
+:global(html.map-no-scroll),
+:global(body.map-no-scroll) {
+  overflow: hidden !important;
 }
 </style>
