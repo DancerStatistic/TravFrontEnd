@@ -98,7 +98,102 @@
                 </q-btn>
               </div>
 
-              <q-btn flat dense round icon="square_foot" :class="{ 'is-active': showRulers }" @click="toggleRulers">
+              <q-btn flat dense round icon="timelapse" class="map-hud__distbtn">
+  <q-tooltip>Distance & travel time</q-tooltip>
+  <q-menu anchor="bottom right" self="top right" class="distance-menu">
+    <q-card class="distance-card">
+      <q-card-section class="distance-card__head">
+        <div class="distance-card__title">
+          <q-icon name="timelapse" size="18px" class="q-mr-sm" />
+          Distance & travel time
+        </div>
+        <q-space />
+        <q-btn dense flat round icon="my_location" @click="setRefToCursor">
+          <q-tooltip>Set reference to cursor</q-tooltip>
+        </q-btn>
+        <q-btn dense flat round icon="center_focus_strong" @click="setRefToViewCenter">
+          <q-tooltip>Set reference to view center</q-tooltip>
+        </q-btn>
+        <q-btn dense flat round icon="pin_drop" :disable="!ctx.point" @click="setRefToContext">
+          <q-tooltip>Set reference to last right-click</q-tooltip>
+        </q-btn>
+      </q-card-section>
+
+      <q-separator />
+
+      <q-card-section class="distance-card__body">
+        <div class="row q-col-gutter-sm">
+          <div class="col-12">
+            <q-input
+              dense
+              filled
+              v-model="refInput"
+              label="Reference (x|y)"
+              placeholder="e.g. 0|0"
+              @keyup.enter="applyRefInput"
+            >
+              <template #append>
+                <q-btn flat dense icon="check" @click="applyRefInput">
+                  <q-tooltip>Apply</q-tooltip>
+                </q-btn>
+              </template>
+            </q-input>
+          </div>
+
+          <div class="col-6">
+            <q-select
+              dense
+              filled
+              v-model="tribe"
+              :options="tribeOptions"
+              label="Tribe"
+              emit-value
+              map-options
+            />
+          </div>
+
+          <div class="col-6">
+            <q-toggle v-model="isSpeedServer" label="Speed server (×2)" dense />
+          </div>
+
+          <div class="col-12">
+            <div class="distance-card__meta">
+              <div>Cursor: <b>{{ Math.round(cursor.x) }}|{{ Math.round(-cursor.y) }}</b></div>
+              <div>Ref: <b>{{ Math.round(refPoint.x) }}|{{ Math.round(-refPoint.y) }}</b></div>
+              <div>Distance: <b>{{ distanceTiles.toFixed(2) }}</b> tiles</div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="row items-center q-gutter-sm">
+              <div class="text-caption">Tournament Square level: <b>{{ tsLevel }}</b> (speedup {{ tsSpeedup.toFixed(1) }}×)</div>
+            </div>
+            <q-slider dense v-model="tsLevel" :min="0" :max="20" :step="1" label label-always />
+          </div>
+
+          <div class="col-12">
+            <q-markup-table dense flat class="distance-card__table">
+              <thead>
+                <tr>
+                  <th class="text-left">Unit</th>
+                  <th class="text-right">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in travelRows" :key="row.key" :class="{ 'is-highlight': row.highlight }">
+                  <td class="text-left">{{ row.label }}</td>
+                  <td class="text-right"><b v-if="row.highlight">{{ row.time }}</b><span v-else>{{ row.time }}</span></td>
+                </tr>
+              </tbody>
+            </q-markup-table>
+          </div>
+        </div>
+      </q-card-section>
+    </q-card>
+  </q-menu>
+</q-btn>
+
+<q-btn flat dense round icon="square_foot" :class="{ 'is-active': showRulers }" @click="toggleRulers">
                 <q-tooltip>Toggle rulers</q-tooltip>
               </q-btn>
 
@@ -576,7 +671,7 @@
 
           <div class="statusbar row items-center q-px-sm q-py-xs">
             <div class="col text-caption">Zoom: {{ zoomK.toFixed(2) }}×</div>
-            <div class="col text-caption text-right">Cursor: {{ Math.round(cursor.x) }}|{{ Math.round(-cursor.y) }}</div>
+            <div class="col text-caption text-right">Cursor: {{ Math.round(cursor.x) }}|{{ Math.round(-cursor.y) }} <span class="statusbar__sep">·</span> Dist: {{ distanceTiles.toFixed(1) }}</div>
           </div>
         </div>
       </template>
@@ -593,7 +688,65 @@
 
           <q-space />
 
-          <q-btn flat dense round icon="square_foot" :class="{ 'is-active': showRulers }" @click="toggleRulers" />
+          <q-btn flat dense round icon="timelapse" class="map-hud__distbtn">
+  <q-menu anchor="bottom right" self="top right" class="distance-menu">
+    <q-card class="distance-card">
+      <q-card-section class="distance-card__head">
+        <div class="distance-card__title">
+          <q-icon name="timelapse" size="18px" class="q-mr-sm" />
+          Distance & travel time
+        </div>
+        <q-space />
+        <q-btn dense flat round icon="my_location" @click="setRefToCursor" />
+        <q-btn dense flat round icon="center_focus_strong" @click="setRefToViewCenter" />
+        <q-btn dense flat round icon="pin_drop" :disable="!ctx.point" @click="setRefToContext" />
+      </q-card-section>
+      <q-separator />
+      <q-card-section class="distance-card__body">
+        <q-input dense filled v-model="refInput" label="Reference (x|y)" placeholder="e.g. 0|0" @keyup.enter="applyRefInput">
+          <template #append>
+            <q-btn flat dense icon="check" @click="applyRefInput" />
+          </template>
+        </q-input>
+
+        <div class="row q-col-gutter-sm q-mt-sm">
+          <div class="col-6">
+            <q-select dense filled v-model="tribe" :options="tribeOptions" label="Tribe" emit-value map-options />
+          </div>
+          <div class="col-6">
+            <q-toggle v-model="isSpeedServer" label="Speed ×2" dense />
+          </div>
+        </div>
+
+        <div class="distance-card__meta q-mt-sm">
+          <div>Cursor: <b>{{ Math.round(cursor.x) }}|{{ Math.round(-cursor.y) }}</b></div>
+          <div>Ref: <b>{{ Math.round(refPoint.x) }}|{{ Math.round(-refPoint.y) }}</b></div>
+          <div>Distance: <b>{{ distanceTiles.toFixed(2) }}</b> tiles</div>
+        </div>
+
+        <div class="q-mt-sm text-caption">Tournament Square level: <b>{{ tsLevel }}</b> (speedup {{ tsSpeedup.toFixed(1) }}×)</div>
+        <q-slider dense v-model="tsLevel" :min="0" :max="20" :step="1" label label-always />
+
+        <q-markup-table dense flat class="distance-card__table q-mt-sm">
+          <thead>
+            <tr>
+              <th class="text-left">Unit</th>
+              <th class="text-right">Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in travelRows" :key="row.key" :class="{ 'is-highlight': row.highlight }">
+              <td class="text-left">{{ row.label }}</td>
+              <td class="text-right"><b v-if="row.highlight">{{ row.time }}</b><span v-else>{{ row.time }}</span></td>
+            </tr>
+          </tbody>
+        </q-markup-table>
+      </q-card-section>
+    </q-card>
+  </q-menu>
+</q-btn>
+
+<q-btn flat dense round icon="square_foot" :class="{ 'is-active': showRulers }" @click="toggleRulers" />
           <q-btn flat dense round :icon="showGrid ? 'grid_on' : 'grid_off'" @click="showGrid = !showGrid" />
           <q-btn flat dense round :icon="showBackground ? 'wallpaper' : 'hide_image'" @click="showBackground = !showBackground" />
           <q-btn flat dense round icon="refresh" @click="resetView" />
@@ -886,7 +1039,7 @@
 
       <div class="statusbar row items-center q-px-sm q-py-xs">
         <div class="col text-caption">Zoom: {{ zoomK.toFixed(2) }}×</div>
-        <div class="col text-caption text-right">Cursor: {{ Math.round(cursor.x) }}|{{ Math.round(-cursor.y) }}</div>
+        <div class="col text-caption text-right">Cursor: {{ Math.round(cursor.x) }}|{{ Math.round(-cursor.y) }} <span class="statusbar__sep">·</span> Dist: {{ distanceTiles.toFixed(1) }}</div>
       </div>
     </div>
 
@@ -936,6 +1089,10 @@
           <q-item-section avatar><q-icon name="content_copy" /></q-item-section>
           <q-item-section>Copy coordinates</q-item-section>
         </q-item>
+<q-item clickable v-close-popup @click="setRefToContext" :disable="!ctx.point">
+  <q-item-section avatar><q-icon name="timelapse" /></q-item-section>
+  <q-item-section>Set as reference point</q-item-section>
+</q-item>
 
         <q-separator />
 
@@ -1116,6 +1273,153 @@ const minimapDrag = reactive({
 /* === Helpers === */
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n))
+
+/** Distance & travel time calculator */
+const refPoint = ref({ x: 0, y: 0 }) // world coords (y positive down)
+const refInput = ref('0|0')
+
+const tribeOptions = [
+  { label: 'Romans', value: 'romans' },
+  { label: 'Teutons', value: 'teutons' },
+  { label: 'Gauls', value: 'gauls' }
+]
+const tribe = ref('romans')
+const isSpeedServer = ref(false) // Travian "speed" servers (×2 unit speed)
+const tsLevel = ref(0) // Tournament Square level 0..20
+const tsSpeedup = computed(() => 1 + tsLevel.value / 10)
+
+const TROOPS = Object.freeze({
+  romans: [
+    { key: 'legionnaire', label: 'Legionnaire', speed: 6 },
+    { key: 'praetorian', label: 'Praetorian', speed: 5 },
+    { key: 'imperian', label: 'Imperian', speed: 7 },
+    { key: 'equites_legati', label: 'Equites Legati', speed: 16 },
+    { key: 'equites_imperatoris', label: 'Equites Imperatoris', speed: 14 },
+    { key: 'equites_caesaris', label: 'Equites Caesaris', speed: 10 },
+    { key: 'ram', label: 'Battering Ram', speed: 4 },
+    { key: 'catapult', label: 'Fire Catapult', speed: 3, highlight: true },
+    { key: 'senator', label: 'Senator', speed: 4 },
+    { key: 'settler', label: 'Settler', speed: 5 },
+    { key: 'merchant', label: 'Merchant', speed: 18, bold: true }
+  ],
+  teutons: [
+    { key: 'clubswinger', label: 'Clubswinger', speed: 7 },
+    { key: 'spearman', label: 'Spearman', speed: 7 },
+    { key: 'axeman', label: 'Axeman', speed: 6 },
+    { key: 'scout', label: 'Scout', speed: 9 },
+    { key: 'paladin', label: 'Paladin', speed: 10 },
+    { key: 'teutonic_knight', label: 'Teutonic Knight', speed: 9 },
+    { key: 'ram', label: 'Ram', speed: 4 },
+    { key: 'catapult', label: 'Catapult', speed: 3, highlight: true },
+    { key: 'chief', label: 'Chief', speed: 4 },
+    { key: 'settler', label: 'Settler', speed: 5 },
+    { key: 'merchant', label: 'Merchant', speed: 12, bold: true }
+  ],
+  gauls: [
+    { key: 'phalanx', label: 'Phalanx', speed: 7 },
+    { key: 'swordsman', label: 'Swordsman', speed: 6 },
+    { key: 'pathfinder', label: 'Pathfinder', speed: 17 },
+    { key: 'theutates_thunder', label: 'Theutates Thunder', speed: 19 },
+    { key: 'druidrider', label: 'Druidrider', speed: 16 },
+    { key: 'haeduan', label: 'Haeduan', speed: 13 },
+    { key: 'ram', label: 'Ram', speed: 4 },
+    { key: 'trebuchet', label: 'Trebuchet', speed: 3, highlight: true },
+    { key: 'chieftain', label: 'Chieftain', speed: 5 },
+    { key: 'settler', label: 'Settler', speed: 5 },
+    { key: 'merchant', label: 'Merchant', speed: 24, bold: true }
+  ]
+})
+
+function formatHours(totalHours) {
+  const tot = Math.max(0, Number(totalHours) || 0)
+  const days = Math.floor(tot / 24)
+  const hours = tot % 24
+  const h = Math.floor(hours)
+  const min = Math.floor((hours * 60) % 60)
+  const sec = Math.floor((((hours * 60) % 60) * 60) % 60)
+  const pad2 = (n) => String(n).padStart(2, '0')
+  return `${days ? `${days}d ` : ''}${h}:${pad2(min)}:${pad2(sec)}`
+}
+
+/** Travian TS speedup model (first 30 tiles at base speed, rest boosted) */
+function calcTravelHours(dist, speed) {
+  const d = Math.max(0, Number(dist) || 0)
+  const s = Math.max(0.0001, Number(speed) || 0.0001)
+  const multi = isSpeedServer.value ? 2 : 1
+  const speedup = tsSpeedup.value
+
+  if (d < 30 || !Number.isFinite(speedup) || speedup <= 1) return d / (s * multi)
+
+  const sub30 = 30 / (s * multi)
+  const super30 = (d - 30) / (s * speedup * multi)
+  return sub30 + super30
+}
+
+function parseCoordString(input) {
+  const s = String(input || '').trim().replace(/[()]/g, '')
+  const m = s.match(/(-?\d+)\s*\|\s*(-?\d+)/)
+  if (!m) return null
+  const x = Number(m[1])
+  const yTrav = Number(m[2]) // travian-style (y positive up)
+  if (!Number.isFinite(x) || !Number.isFinite(yTrav)) return null
+  return { x, y: -yTrav } // convert to world coords
+}
+
+function applyRefInput() {
+  const p = parseCoordString(refInput.value)
+  if (!p) {
+    $q.notify({ message: 'Invalid reference coordinates. Use x|y.', color: 'negative', position: 'top', timeout: 1100 })
+    return
+  }
+  refPoint.value = p
+}
+
+function setRefToCursor() {
+  refPoint.value = { x: cursor.value.x, y: cursor.value.y }
+  refInput.value = `${Math.round(refPoint.value.x)}|${Math.round(-refPoint.value.y)}`
+}
+
+function setRefToViewCenter() {
+  refPoint.value = { x: viewCenter.value.x, y: viewCenter.value.y }
+  refInput.value = `${Math.round(refPoint.value.x)}|${Math.round(-refPoint.value.y)}`
+}
+
+function setRefToContext() {
+  if (!ctx.point) return
+  refPoint.value = { x: ctx.point.x, y: ctx.point.y }
+  refInput.value = `${Math.round(refPoint.value.x)}|${Math.round(-refPoint.value.y)}`
+  $q.notify({ message: 'Reference point set.', color: 'positive', position: 'top', timeout: 800 })
+}
+
+const distanceTiles = computed(() => {
+  const dx = cursor.value.x - refPoint.value.x
+  const dy = cursor.value.y - refPoint.value.y
+  return Math.sqrt(dx * dx + dy * dy)
+})
+
+const travelRows = computed(() => {
+  const list = TROOPS[tribe.value] || TROOPS.romans
+  const dist = distanceTiles.value
+  return list.map((u) => {
+    const hours = calcTravelHours(dist, u.speed)
+    return {
+      key: u.key,
+      label: u.label,
+      time: formatHours(hours),
+      highlight: Boolean(u.highlight) || Boolean(u.bold && u.key === 'merchant')
+    }
+  })
+})
+
+watch(
+  () => refPoint.value,
+  (p) => {
+    if (!p) return
+    refInput.value = `${Math.round(p.x)}|${Math.round(-p.y)}`
+  },
+  { deep: true, immediate: true }
+)
+
 
 function pushHistory() {
   history.value = history.value.slice(0, historyIndex.value + 1)
@@ -2239,6 +2543,22 @@ watch(
 .minimap__footer { margin-top: 8px; display: grid; gap: 2px; }
 .minimap__line { font-size: 12px; color: rgba(255, 255, 255, 0.9); }
 .minimap__muted { color: rgba(255, 255, 255, 0.65); margin-left: 6px; }
+
+
+/* Distance & travel time menu */
+.distance-menu { border-radius: 14px; overflow: hidden; }
+.distance-card { width: 360px; max-width: 88vw; background: rgba(20, 20, 20, 0.98); color: rgba(255, 255, 255, 0.92); }
+.distance-card__head { padding: 10px 12px; }
+.distance-card__title { display: flex; align-items: center; font-weight: 700; letter-spacing: 0.2px; }
+.distance-card__body { padding: 12px; }
+.distance-card__meta { display: grid; gap: 2px; font-size: 12px; color: rgba(255, 255, 255, 0.85); }
+.distance-card__table :deep(th),
+.distance-card__table :deep(td) { padding: 6px 8px; }
+.distance-card__table :deep(thead tr) { background: rgba(255, 255, 255, 0.04); }
+.distance-card__table :deep(tbody tr.is-highlight) { background: rgba(0, 255, 255, 0.08); }
+.distance-card__table :deep(tbody tr.is-highlight td) { color: rgba(255, 255, 255, 0.98); }
+
+.statusbar__sep { opacity: 0.6; margin: 0 6px; }
 
 /* Mobile tweaks */
 @media (max-width: 599px) {
