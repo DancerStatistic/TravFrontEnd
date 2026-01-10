@@ -1,25 +1,40 @@
 <template>
   <q-page class="column alliance-detail-page">
     <!-- Toolbar -->
-    <q-toolbar class="bg-primary text-white">
-      <q-btn dense flat round icon="arrow_back" @click="$router.back()" />
-      <q-toolbar-title>Alliance: {{ tag }}</q-toolbar-title>
+    <q-toolbar class="alliance-toolbar">
+      <q-btn dense flat round icon="arrow_back" class="toolbar-btn" @click="$router.back()" />
+      <q-toolbar-title class="toolbar-title">
+        <div class="title-row">
+          <div class="title-main">Alliance</div>
+          <div class="title-tag">{{ tag }}</div>
+        </div>
+        <div class="title-sub">
+          {{ stats.villages.toLocaleString() }} villages •
+          {{ stats.totalPop.toLocaleString() }} pop •
+          {{ stats.totalVP.toLocaleString() }} VP •
+          Avg {{ stats.avgPop.toLocaleString() }} pop/village
+        </div>
+      </q-toolbar-title>
 
-      <div class="row items-center q-gutter-sm on-right q-pr-sm">
-        <q-chip dense square color="white" text-color="primary" icon="groups">
+      <div class="row items-center q-gutter-sm on-right q-pr-sm toolbar-actions">
+        <q-chip dense square class="kpi-chip" icon="groups">
           {{ stats.villages }} villages
         </q-chip>
-        <q-chip dense square color="white" text-color="primary" icon="diversity_3">
+        <q-chip dense square class="kpi-chip" icon="diversity_3">
           {{ stats.totalPop.toLocaleString() }} pop
         </q-chip>
-        <q-chip dense square color="white" text-color="primary" icon="star">
+        <q-chip dense square class="kpi-chip" icon="star">
           {{ stats.totalVP.toLocaleString() }} VP
         </q-chip>
-        <q-btn dense flat round icon="center_focus_strong" @click="fitToContent">
+
+        <q-separator vertical class="toolbar-sep" />
+
+        <q-btn dense flat round icon="center_focus_strong" class="toolbar-btn" @click="fitToContent">
           <q-tooltip>Fit to alliance</q-tooltip>
         </q-btn>
         <q-btn
           dense flat round icon="open_in_new"
+          class="toolbar-btn"
           :href="`https://nys.x1.europe.travian.com/karte.php?alliance=${encodeURIComponent(tag)}`"
           target="_blank"
         >
@@ -30,10 +45,45 @@
 
     <!-- Content -->
     <div class="content-wrap q-pa-md">
-      <q-splitter v-model="split" :limits="[20, 70]" >
+      <q-splitter v-model="split" :limits="[22, 72]" class="alliance-splitter">
         <!-- MAP PANEL -->
         <template #before>
-          <div class="panel map-panel" style="height: 90vh">
+          <div class="panel map-panel">
+            <div class="panel-header">
+              <div class="row items-center no-wrap q-gutter-sm">
+                <q-icon name="public" size="18px" class="panel-icon" />
+                <div class="panel-title">Alliance Map</div>
+                <q-space />
+                <q-chip dense square class="meta-chip" icon="gps_fixed">
+                  Cursor: X {{ cursor.x.toFixed(0) }} / Y {{ cursor.y.toFixed(0) }}
+                </q-chip>
+                <q-chip dense square class="meta-chip" icon="zoom_in">
+                  {{ zoomK.toFixed(2) }}×
+                </q-chip>
+              </div>
+
+              <div class="row items-center q-gutter-sm q-mt-sm">
+                <q-btn-group unelevated rounded class="toolgroup">
+                  <q-btn
+                    dense
+                    icon="center_focus_strong"
+                    label="Fit"
+                    class="toolbtn"
+                    @click="fitToContent"
+                  />
+                  <q-btn dense icon="restart_alt" label="Reset" class="toolbtn" @click="resetView" />
+                </q-btn-group>
+
+                <q-space />
+
+                <q-btn dense flat icon="help_outline" class="hint-btn">
+                  <q-tooltip>
+                    Drag to pan • Wheel/trackpad to zoom • Hover markers for details • Click marker to open player
+                  </q-tooltip>
+                </q-btn>
+              </div>
+            </div>
+
             <div class="map-area" ref="mapAreaEl" @contextmenu.capture="onContextMenu">
               <svg
                 ref="svg"
@@ -47,63 +97,111 @@
                 <g id="viewport">
                   <!-- Optional background image -->
                   <image
-                    x="-200" y="-200" width="400" height="400"
-                    :href="bgUrl" :xlink:href="bgUrl"
+                    x="-200"
+                    y="-200"
+                    width="400"
+                    height="400"
+                    :href="bgUrl"
+                    :xlink:href="bgUrl"
                     preserveAspectRatio="none"
                     opacity="0.75"
                   />
 
-                  <!-- Fallback GRID (actual lines; always visible) -->
+                  <!-- Fallback GRID -->
                   <g id="grid">
-                    <template v-for="x in gridTicks" :key="'vx'+x">
-                      <line :x1="x" y1="-200" :x2="x" y2="200"
-                            stroke="#3f3f3f" stroke-width="0.6"
-                            vector-effect="non-scaling-stroke" />
+                    <template v-for="x in gridTicks" :key="'vx' + x">
+                      <line
+                        :x1="x"
+                        y1="-200"
+                        :x2="x"
+                        y2="200"
+                        stroke="#3f3f3f"
+                        stroke-width="0.6"
+                        vector-effect="non-scaling-stroke"
+                      />
                     </template>
-                    <template v-for="y in gridTicks" :key="'hz'+y">
-                      <line x1="-200" :y1="y" x2="200" :y2="y"
-                            stroke="#3f3f3f" stroke-width="0.6"
-                            vector-effect="non-scaling-stroke" />
+                    <template v-for="y in gridTicks" :key="'hz' + y">
+                      <line
+                        x1="-200"
+                        :y1="y"
+                        x2="200"
+                        :y2="y"
+                        stroke="#3f3f3f"
+                        stroke-width="0.6"
+                        vector-effect="non-scaling-stroke"
+                      />
                     </template>
                   </g>
 
                   <!-- Axes -->
-                  <line x1="-200" y1="0" x2="200" y2="0"
-                        stroke="#9e9e9e" stroke-width="1.2" vector-effect="non-scaling-stroke" />
-                  <line x1="0" y1="-200" x2="0" y2="200"
-                        stroke="#9e9e9e" stroke-width="1.2" vector-effect="non-scaling-stroke" />
+                  <line
+                    x1="-200"
+                    y1="0"
+                    x2="200"
+                    y2="0"
+                    stroke="#9e9e9e"
+                    stroke-width="1.2"
+                    vector-effect="non-scaling-stroke"
+                  />
+                  <line
+                    x1="0"
+                    y1="-200"
+                    x2="0"
+                    y2="200"
+                    stroke="#9e9e9e"
+                    stroke-width="1.2"
+                    vector-effect="non-scaling-stroke"
+                  />
 
                   <!-- World border -->
-                  <rect x="-200" y="-200" width="400" height="400"
-                        fill="none" stroke="#00e5ff" stroke-width="1.2"
-                        opacity="0.25" vector-effect="non-scaling-stroke" />
+                  <rect
+                    x="-200"
+                    y="-200"
+                    width="400"
+                    height="400"
+                    fill="none"
+                    stroke="#00e5ff"
+                    stroke-width="1.2"
+                    opacity="0.25"
+                    vector-effect="non-scaling-stroke"
+                  />
 
-                  <!-- Markers from API (sanitized + normalized) -->
+                  <!-- Markers -->
                   <g ref="markersGroup" id="markersLayer" v-html="svgContent"></g>
 
-                  <!-- Hover selection from the table -->
+                  <!-- Hover selection -->
                   <g id="overlayLayer">
-                    <circle v-if="selection" :cx="selection.x" :cy="selection.y" :r="2.4"
-                            fill="none" stroke="#00e5ff" stroke-width="0.8" vector-effect="non-scaling-stroke" />
-                    <circle v-if="selection" :cx="selection.x" :cy="selection.y" :r="0.9"
-                            fill="#00e5ff" opacity="0.85" />
+                    <circle
+                      v-if="selection"
+                      :cx="selection.x"
+                      :cy="selection.y"
+                      :r="2.4"
+                      fill="none"
+                      stroke="#00e5ff"
+                      stroke-width="0.8"
+                      vector-effect="non-scaling-stroke"
+                    />
+                    <circle v-if="selection" :cx="selection.x" :cy="selection.y" :r="0.9" fill="#00e5ff" opacity="0.85" />
                   </g>
 
-                  <!-- Debug center dot (remove if you like) -->
+                  <!-- Debug center dot -->
                   <circle cx="0" cy="0" r="0.9" fill="#ff5252" opacity="0.9" />
                 </g>
 
                 <!-- Screen-fixed coord labels -->
                 <g id="coordLabels">
-                  <text id="labelLeft"   text-anchor="end"    alignment-baseline="middle" class="coord-label"/>
-                  <text id="labelRight"  text-anchor="start"  alignment-baseline="middle" class="coord-label"/>
-                  <text id="labelTop"    text-anchor="middle" alignment-baseline="hanging" class="coord-label"/>
-                  <text id="labelBottom" text-anchor="middle" alignment-baseline="baseline" class="coord-label"/>
+                  <text id="labelLeft" text-anchor="end" alignment-baseline="middle" class="coord-label" />
+                  <text id="labelRight" text-anchor="start" alignment-baseline="middle" class="coord-label" />
+                  <text id="labelTop" text-anchor="middle" alignment-baseline="hanging" class="coord-label" />
+                  <text id="labelBottom" text-anchor="middle" alignment-baseline="baseline" class="coord-label" />
                 </g>
               </svg>
 
               <div v-if="!loading && !rawSvg" class="empty-hint">
-                No markers received from the server for this alliance.
+                <div class="empty-card">
+                  <q-icon name="info" size="18px" />
+                  <div>No markers received from the server for this alliance.</div>
+                </div>
               </div>
 
               <!-- Right-click context menu -->
@@ -113,6 +211,15 @@
                   <q-item clickable :disable="!ctx.hasMarker" v-close-popup @click="centerOnContext">
                     <q-item-section avatar><q-icon name="center_focus_strong" /></q-item-section>
                     <q-item-section>Center map on this village</q-item-section>
+                  </q-item>
+                  <q-separator />
+                  <q-item clickable v-close-popup @click="fitToContent">
+                    <q-item-section avatar><q-icon name="fit_screen" /></q-item-section>
+                    <q-item-section>Fit to alliance</q-item-section>
+                  </q-item>
+                  <q-item clickable v-close-popup @click="resetView">
+                    <q-item-section avatar><q-icon name="restart_alt" /></q-item-section>
+                    <q-item-section>Reset view</q-item-section>
                   </q-item>
                 </q-list>
               </q-menu>
@@ -131,8 +238,12 @@
             </div>
 
             <div class="statusbar row items-center q-px-sm q-py-xs">
-              <div class="col text-caption">Cursor: X {{ cursor.x.toFixed(0) }} / Y {{ cursor.y.toFixed(0) }}</div>
-              <div class="col text-caption text-right">Zoom: {{ zoomK.toFixed(2) }}×</div>
+              <div class="col text-caption status-left">
+                Drag to pan • Scroll to zoom • Right-click for actions
+              </div>
+              <div class="col text-caption text-right status-right">
+                Markers: {{ villages.length.toLocaleString() }} • Filtered: {{ villagesFiltered.length.toLocaleString() }}
+              </div>
             </div>
           </div>
         </template>
@@ -140,30 +251,85 @@
         <!-- TABLE PANEL -->
         <template #after>
           <div class="panel table-panel">
-            <div class="q-pa-md">
-              <q-input
-                v-model="filter"
-                dense outlined clearable
-                debounce="150"
-                placeholder="Filter villages / players / coords…"
-                class="q-mb-sm"
-              >
-                <template #append><q-icon name="search" /></template>
-              </q-input>
+            <div class="panel-header">
+              <div class="row items-center no-wrap q-gutter-sm">
+                <q-icon name="table_view" size="18px" class="panel-icon" />
+                <div class="panel-title">Villages</div>
+                <q-chip dense square class="meta-chip">
+                  {{ villagesFiltered.length.toLocaleString() }} / {{ villages.length.toLocaleString() }}
+                </q-chip>
+                <q-space />
+                <q-btn dense flat round icon="download" class="toolbar-btn" @click="exportCsv">
+                  <q-tooltip>Export filtered (CSV)</q-tooltip>
+                </q-btn>
+              </div>
 
+              <div class="row items-center q-gutter-sm q-mt-sm">
+                <q-input
+                  v-model="filter"
+                  dense
+                  outlined
+                  clearable
+                  debounce="150"
+                  placeholder="Filter villages / players / coords…"
+                  class="filter-input"
+                >
+                  <template #prepend><q-icon name="search" /></template>
+                  <template #append>
+                    <q-btn
+                      v-if="filter"
+                      dense
+                      flat
+                      round
+                      icon="close"
+                      @click="filter = ''"
+                    />
+                  </template>
+                </q-input>
+
+                <q-btn dense outline icon="tune" label="Columns" class="colbtn">
+                  <q-menu>
+                    <q-list style="min-width: 240px">
+                      <q-item-label header>Visible columns</q-item-label>
+                      <q-item v-for="c in columns" :key="c.name" clickable>
+                        <q-item-section>
+                          <q-toggle
+                            v-model="visibleColumnSet[c.name]"
+                            :label="c.label"
+                            dense
+                          />
+                        </q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-menu>
+                </q-btn>
+              </div>
+            </div>
+
+            <div class="q-pa-md table-wrap">
               <q-table
-                :columns="columns"
+                :columns="columnsVisible"
                 :rows="villagesFiltered"
                 row-key="coords"
-                flat bordered separator="cell"
+                flat
+                class="villages-table"
                 :pagination.sync="pagination"
                 :rows-per-page-options="[10, 20, 50, 0]"
                 :filter="filter"
+                virtual-scroll
+                :virtual-scroll-sticky-size-start="44"
                 @row-click="(_, row) => centerFromCoords(row.coords)"
               >
+                <template #body-cell-village="props">
+                  <q-td :props="props" class="cell-strong">
+                    <div class="ellipsis">{{ props.row.village }}</div>
+                    <div class="cell-sub ellipsis">{{ props.row.coords }}</div>
+                  </q-td>
+                </template>
+
                 <template #body-cell-player="props">
                   <q-td :props="props">
-                    <RouterLink :to="{ name: 'player-detail', params: { name: props.row.player } }">
+                    <RouterLink class="link" :to="{ name: 'player-detail', params: { name: props.row.player } }">
                       {{ props.row.player }}
                     </RouterLink>
                   </q-td>
@@ -172,12 +338,26 @@
                 <template #body-cell-coords="props">
                   <q-td :props="props">
                     <a
+                      class="link"
                       :href="makeMapLink(props.row.coords)"
-                      target="_blank" rel="noopener"
+                      target="_blank"
+                      rel="noopener"
                       @mouseenter="hoverCoords(props.row.coords)"
                       @mouseleave="selection = null"
                       @click.stop
                     >{{ props.row.coords }}</a>
+                  </q-td>
+                </template>
+
+                <template #body-cell-population="props">
+                  <q-td :props="props" class="text-right tabular">
+                    {{ Number(props.row.population || 0).toLocaleString() }}
+                  </q-td>
+                </template>
+
+                <template #body-cell-victoryPoints="props">
+                  <q-td :props="props" class="text-right tabular">
+                    {{ Number(props.row.victoryPoints || 0).toLocaleString() }}
                   </q-td>
                 </template>
               </q-table>
@@ -189,20 +369,22 @@
 
     <!-- Player Profile Dialog -->
     <q-dialog v-model="profileDialog">
-      <q-card style="min-width:400px; max-width:800px">
+      <q-card class="profile-card">
         <q-card-section class="row items-center">
           <div class="text-h6">Player: {{ profile.name }}</div>
-          <q-space/>
-          <q-btn icon="close" flat round dense @click="profileDialog = false"/>
+          <q-space />
+          <q-btn icon="close" flat round dense @click="profileDialog = false" />
         </q-card-section>
-        <q-separator/>
+        <q-separator />
         <q-card-section v-if="profile.villages.length">
           <q-table
             :columns="profileColumns"
             :rows="profile.villages"
             row-key="coords"
-            flat dense wrap-cells
-            :rows-per-page-options="[10,20,50,0]"
+            flat
+            dense
+            wrap-cells
+            :rows-per-page-options="[10, 20, 50, 0]"
           />
         </q-card-section>
         <q-card-section v-else class="text-grey">
@@ -227,23 +409,23 @@ import bgUrl from 'assets/background.png' // optional; safe if missing
 
 /* Route & layout */
 const route = useRoute()
-const tag   = route.params.tag
+const tag = route.params.tag
 const split = ref(35)
 
 /* Refs */
-const mapAreaEl    = ref(null)
-const svg          = ref(null)
+const mapAreaEl = ref(null)
+const svg = ref(null)
 const markersGroup = ref(null)
 
 /* Map state */
-const rawSvg     = ref('')     // raw server snippet (for empty check)
-const svgContent = ref('')     // sanitized & injected
-const loading    = ref(false)
-const zoomK      = ref(1)
-const cursor     = ref({ x: 0, y: 0 })
+const rawSvg = ref('')
+const svgContent = ref('')
+const loading = ref(false)
+const zoomK = ref(1)
+const cursor = ref({ x: 0, y: 0 })
 
 /* Marker visibility/size */
-const markerSize = ref(2) // try 2..4 for visibility
+const markerSize = ref(2)
 
 /* Fallback grid ticks every 10 units across -200..200 */
 const gridTicks = Array.from({ length: 41 }, (_, i) => -200 + i * 10)
@@ -254,19 +436,30 @@ const hideTooltip = () => { tooltip.value.show = false }
 const ctx = reactive({ hasMarker: false, point: null })
 
 /* Table data */
-const villages   = ref([])
-const filter     = ref('')
+const villages = ref([])
+const filter = ref('')
 const pagination = ref({ page: 1, rowsPerPage: 20 })
 
 /* Columns */
 const columns = [
-  { name:'village',       label:'Village',    field:'village',       align:'left',  sortable: true },
-  { name:'coords',        label:'Coords',     field:'coords',        align:'left',  sortable: true },
-  { name:'population',    label:'Population', field:'population',    align:'right', sortable: true },
-  { name:'victoryPoints', label:'VP',         field:'victoryPoints', align:'right', sortable: true },
-  { name:'player',        label:'Player',     field:'player',        align:'left',  sortable: true },
-  { name:'tribe',         label:'Tribe',      field:'tribe',         align:'left',  sortable: true }
+  { name: 'village', label: 'Village', field: 'village', align: 'left', sortable: true },
+  { name: 'coords', label: 'Coords', field: 'coords', align: 'left', sortable: true },
+  { name: 'population', label: 'Population', field: 'population', align: 'right', sortable: true },
+  { name: 'victoryPoints', label: 'VP', field: 'victoryPoints', align: 'right', sortable: true },
+  { name: 'player', label: 'Player', field: 'player', align: 'left', sortable: true },
+  { name: 'tribe', label: 'Tribe', field: 'tribe', align: 'left', sortable: true }
 ]
+
+/* Column visibility (UI only) */
+const visibleColumnSet = reactive({
+  village: true,
+  coords: true,
+  population: true,
+  victoryPoints: true,
+  player: true,
+  tribe: true
+})
+const columnsVisible = computed(() => columns.filter(c => visibleColumnSet[c.name] !== false))
 
 /* Summary stats */
 const stats = computed(() => {
@@ -283,34 +476,34 @@ const villagesFiltered = computed(() => {
   if (!q) return villages.value
   return villages.value.filter(r =>
     (r.village || '').toLowerCase().includes(q) ||
-    (r.coords  || '').toLowerCase().includes(q) ||
-    (r.player  || '').toLowerCase().includes(q) ||
-    (r.tribe   || '').toLowerCase().includes(q)
+    (r.coords || '').toLowerCase().includes(q) ||
+    (r.player || '').toLowerCase().includes(q) ||
+    (r.tribe || '').toLowerCase().includes(q)
   )
 })
 
 /* Player dialog */
-const profileDialog  = ref(false)
-const profile        = ref({ name:'', villages:[], totalPopulation:0 })
+const profileDialog = ref(false)
+const profile = ref({ name: '', villages: [], totalPopulation: 0 })
 const profileColumns = [
-  { name:'village',       label:'Village',    field:'village'       },
-  { name:'coords',        label:'Coords',     field:'coords'        },
-  { name:'population',    label:'Population', field:'population',    align:'right' },
-  { name:'victoryPoints', label:'VP',         field:'victoryPoints', align:'right' }
+  { name: 'village', label: 'Village', field: 'village' },
+  { name: 'coords', label: 'Coords', field: 'coords' },
+  { name: 'population', label: 'Population', field: 'population', align: 'right' },
+  { name: 'victoryPoints', label: 'VP', field: 'victoryPoints', align: 'right' }
 ]
 async function openProfile (owner) {
   try {
     const { data } = await api.get(`/api/player/${encodeURIComponent(owner)}/villages`)
     profile.value.name = data.player
     profile.value.villages = data.villages.map(r => ({
-      village:       r.village_name,
-      coords:        `(${r.x},${r.y})`,
-      population:    r.population,
+      village: r.village_name,
+      coords: `(${r.x},${r.y})`,
+      population: r.population,
       victoryPoints: r.victory_points,
-      alliance:      r.alliance_tag,
-      tribe:         r.tribe
+      alliance: r.alliance_tag,
+      tribe: r.tribe
     }))
-    profile.value.totalPopulation = profile.value.villages.reduce((sum,v)=>sum+(v.population||0), 0)
+    profile.value.totalPopulation = profile.value.villages.reduce((sum, v) => sum + (v.population || 0), 0)
   } catch {
     profile.value = { name: owner, villages: [], totalPopulation: 0 }
   }
@@ -327,7 +520,6 @@ function parseCoords (coords) {
   return m ? { x: Number(m[1]), y: Number(m[2]) } : null
 }
 function sanitizeHtml (html) {
-  // strip leaking styles/scripts + nested <svg> wrappers
   return String(html)
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -387,8 +579,8 @@ function fitToBBox (bbox, pad = 1.02) {
 function unionBBox (a, b) {
   const ax2 = a.x + a.width, ay2 = a.y + a.height
   const bx2 = b.x + b.width, by2 = b.y + b.height
-  const x  = Math.min(a.x, b.x)
-  const y  = Math.min(a.y, b.y)
+  const x = Math.min(a.x, b.x)
+  const y = Math.min(a.y, b.y)
   const x2 = Math.max(ax2, bx2)
   const y2 = Math.max(ay2, by2)
   return { x, y, width: x2 - x, height: y2 - y }
@@ -409,10 +601,21 @@ function updateLabels () {
   const box = getContainerRect()
   if (!box) return
   const t = d3.zoomTransform(svg.value)
-  d3.select('#labelLeft').text(t.invertX(0).toFixed(0)).attr('x', 5).attr('y', box.height / 2)
-  d3.select('#labelRight').text(t.invertX(box.width).toFixed(0)).attr('x', box.width - 5).attr('y', box.height / 2)
-  d3.select('#labelTop').text(t.invertY(0).toFixed(0)).attr('x', box.width / 2).attr('y', 5)
-  d3.select('#labelBottom').text(t.invertY(box.height).toFixed(0)).attr('x', box.width / 2).attr('y', box.height - 5)
+  d3.select('#labelLeft').text(t.invertX(0).toFixed(0)).attr('x', 8).attr('y', box.height / 2)
+  d3.select('#labelRight').text(t.invertX(box.width).toFixed(0)).attr('x', box.width - 8).attr('y', box.height / 2)
+  d3.select('#labelTop').text(t.invertY(0).toFixed(0)).attr('x', box.width / 2).attr('y', 8)
+  d3.select('#labelBottom').text(t.invertY(box.height).toFixed(0)).attr('x', box.width / 2).attr('y', box.height - 8)
+}
+
+/* New: reset view */
+function resetView () {
+  const rect = getContainerRect()
+  if (!rect) return
+  const k = 1
+  const tx = rect.width / 2 - k * 0
+  const ty = rect.height / 2 - k * 0
+  const t = d3.zoomIdentity.translate(tx, ty).scale(k)
+  d3.select(svg.value).transition().duration(250).call(zoom.transform, t)
 }
 
 /* Normalize marker size/appearance after injection */
@@ -438,7 +641,7 @@ function bindMarkerDelegatedEvents () {
     if (!el) return
     const tip = el.getAttribute('data-tooltip') || ''
     const content = sanitizeTooltip(tip.replace(/<br>/g, '<br/>'))
-    tooltip.value = { show: true, x: e.clientX + 8, y: e.clientY + 8, content }
+    tooltip.value = { show: true, x: e.clientX + 10, y: e.clientY + 10, content }
   }
   root.onpointerout = (e) => {
     if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return
@@ -471,7 +674,28 @@ function centerOnContext () {
 /* Pointer handlers */
 function onPointerDown (evt) { cursor.value = toMapCoords(evt) }
 function onPointerMove (evt) { cursor.value = toMapCoords(evt) }
-function onPointerUp   (evt) { cursor.value = toMapCoords(evt) }
+function onPointerUp (evt) { cursor.value = toMapCoords(evt) }
+
+/* Export CSV (filtered) */
+function exportCsv () {
+  const rows = villagesFiltered.value
+  const headers = ['village', 'coords', 'population', 'victoryPoints', 'player', 'tribe']
+  const esc = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`
+  const csv = [
+    headers.join(','),
+    ...rows.map(r => headers.map(h => esc(r[h])).join(','))
+  ].join('\n')
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `alliance_${String(tag).replaceAll(' ', '_')}_villages.csv`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
 
 /* Mount & resize */
 let ro = null
@@ -486,7 +710,6 @@ watch(split, scheduleSafeFit)
 onMounted(async () => {
   loading.value = true
   try {
-    // Zoom
     zoom = d3.zoom()
       .scaleExtent([0.5, 50])
       .on('zoom', ({ transform }) => {
@@ -496,30 +719,26 @@ onMounted(async () => {
       })
     d3.select(svg.value).call(zoom)
 
-    // Resize observer (panel size changes)
     ro = new ResizeObserver(() => scheduleSafeFit())
     if (mapAreaEl.value) ro.observe(mapAreaEl.value)
 
-    // Markers (sanitize away styles/nested <svg>)
     const mapRes = await api.get(`/api/alliance/${encodeURIComponent(tag)}/map`)
-    rawSvg.value  = mapRes.data?.markers || ''
+    rawSvg.value = mapRes.data?.markers || ''
     svgContent.value = sanitizeHtml(rawSvg.value)
     await nextTick()
-    normalizeMarkers()          // <— make dots visible
+    normalizeMarkers()
     bindMarkerDelegatedEvents()
 
-    // Table
     const listRes = await api.get(`/api/alliance/${encodeURIComponent(tag)}/villages`)
     villages.value = (listRes.data?.villages || []).map(r => ({
-      village:       r.village_name,
-      coords:        `(${r.x},${r.y})`,
-      population:    r.population,
+      village: r.village_name,
+      coords: `(${r.x},${r.y})`,
+      population: r.population,
       victoryPoints: r.victory_points,
-      player:        r.player_name,
-      tribe:         r.tribe
+      player: r.player_name,
+      tribe: r.tribe
     }))
 
-    // Initial fit (after markers are normalized, so bbox is correct)
     scheduleSafeFit()
     updateLabels()
   } finally {
@@ -533,31 +752,271 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.alliance-detail-page { height: 100%; min-height: 0; padding: 0; background: #0d0d0d; }
-.content-wrap { flex: 1; min-height: 0; height: 100%; }
-.panel { height: 100%; min-height: 0; background: #0d0d0d; color: #eaeaea; border: 1px solid #1f1f1f; border-radius: 8px; overflow: hidden; }
+.alliance-detail-page {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  background: radial-gradient(1200px 800px at 20% 0%, rgba(0, 229, 255, 0.08), transparent 60%),
+              radial-gradient(900px 600px at 90% 10%, rgba(123, 97, 255, 0.10), transparent 55%),
+              #07090c;
+}
+
+/* Toolbar */
+.alliance-toolbar {
+  background: linear-gradient(90deg, rgba(0,229,255,0.14), rgba(123,97,255,0.12));
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  color: #eaf6ff;
+}
+.toolbar-title {
+  padding-left: 6px;
+}
+.title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.title-main {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.title-tag {
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: #00e5ff;
+  text-shadow: 0 0 18px rgba(0,229,255,0.15);
+}
+.title-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(234,246,255,0.76);
+}
+.kpi-chip {
+  background: rgba(255,255,255,0.9);
+  color: #0a0f14;
+}
+.toolbar-btn {
+  border-radius: 10px;
+  transition: transform 120ms ease, background 120ms ease;
+}
+.toolbar-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(255,255,255,0.06);
+}
+.toolbar-sep {
+  height: 26px;
+  opacity: 0.35;
+}
+
+/* Layout */
+.content-wrap {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+.alliance-splitter :deep(.q-splitter__separator) {
+  width: 10px;
+  background: transparent;
+}
+.alliance-splitter :deep(.q-splitter__separator-area) {
+  background: transparent;
+}
+.alliance-splitter :deep(.q-splitter__separator-area:hover) {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+}
+
+/* Panels */
+.panel {
+  height: calc(100vh - 96px);
+  min-height: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(10, 12, 16, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #eaeaea;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+}
+.panel-header {
+  padding: 12px 12px 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
+}
+.panel-title {
+  font-weight: 700;
+  letter-spacing: 0.35px;
+}
+.panel-icon {
+  color: rgba(0,229,255,0.9);
+  filter: drop-shadow(0 0 10px rgba(0,229,255,0.2));
+}
+.meta-chip {
+  background: rgba(255,255,255,0.06);
+  color: rgba(234,246,255,0.88);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.toolgroup {
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+}
+.toolbtn {
+  text-transform: none;
+}
+.hint-btn {
+  opacity: 0.9;
+}
 
 /* Map */
-.map-panel { display: flex; flex-direction: column; }
-.map-area { position: relative; flex: 1; min-height: 0; background: #000; }
-.map-area svg { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; }
+.map-panel {
+  display: flex;
+  flex-direction: column;
+}
+.map-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #000;
+}
+.map-area svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(900px 600px at 40% 20%, rgba(0,229,255,0.06), transparent 55%),
+              radial-gradient(900px 600px at 70% 40%, rgba(123,97,255,0.06), transparent 55%),
+              #000;
+}
 
 /* Allow styling of injected SVG content */
 .map-area :deep(#markersLayer .marker) {
   vector-effect: non-scaling-stroke;
   image-rendering: pixelated;
+  transition: filter 120ms ease, transform 120ms ease, opacity 120ms ease;
+  transform-origin: center;
+}
+.map-area :deep(#markersLayer .marker:hover) {
+  filter: drop-shadow(0 0 10px rgba(0,229,255,0.35));
 }
 
 /* Coords labels */
-.coord-label { fill: #bbb; font-size: 11px; user-select: none; }
+.coord-label {
+  fill: rgba(234,246,255,0.78);
+  font-size: 11px;
+  user-select: none;
+  paint-order: stroke;
+  stroke: rgba(0,0,0,0.65);
+  stroke-width: 3px;
+}
 
 /* Tooltip */
-.tooltip { position: fixed; pointer-events: none; background: rgba(0,0,0,0.9); color: #fff; padding: 6px 8px; border-radius: 4px; font-size: .8rem; white-space: nowrap; z-index: 1000; border: 1px solid rgba(255,255,255,0.08); }
+.tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: rgba(8, 10, 14, 0.94);
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  z-index: 1000;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+}
+
+/* Empty hint */
+.empty-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 50px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.empty-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(234,246,255,0.86);
+}
 
 /* Statusbar */
-.statusbar { height: 28px; border-top: 1px solid #1f1f1f; background: #0d0d0d; color: #ddd; }
+.statusbar {
+  height: 34px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: rgba(10,12,16,0.88);
+  color: rgba(234,246,255,0.80);
+}
+.status-left,
+.status-right {
+  opacity: 0.9;
+}
 
 /* Table */
-.table-panel { overflow: auto; }
-.empty-hint { position:absolute; left:0; right:0; bottom:36px; text-align:center; color:#bbb; font-size:12px; pointer-events:none; }
+.table-panel {
+  display: flex;
+  flex-direction: column;
+}
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+}
+.filter-input {
+  flex: 1;
+  min-width: 260px;
+}
+.colbtn {
+  border-radius: 12px;
+  text-transform: none;
+}
+.villages-table {
+  border-radius: 12px;
+  overflow: hidden;
+}
+.villages-table :deep(.q-table__top),
+.villages-table :deep(.q-table__middle),
+.villages-table :deep(.q-table__bottom) {
+  background: transparent;
+}
+.villages-table :deep(thead tr th) {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(10,12,16,0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  color: rgba(234,246,255,0.85);
+}
+.villages-table :deep(tbody tr:hover) {
+  background: rgba(0,229,255,0.06);
+}
+.cell-strong {
+  font-weight: 600;
+}
+.cell-sub {
+  font-size: 12px;
+  opacity: 0.72;
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+.link {
+  color: #00e5ff;
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+
+/* Dialog */
+.profile-card {
+  min-width: 400px;
+  max-width: 900px;
+  width: min(900px, 92vw);
+  border-radius: 14px;
+}
 </style>

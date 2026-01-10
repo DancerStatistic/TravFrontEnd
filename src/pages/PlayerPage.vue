@@ -67,31 +67,67 @@
         <q-card flat bordered class="main-card">
           <q-card-section>
             <div class="row items-center q-gutter-md q-mb-md">
+              <!-- AUTOCOMPLETE (replaces free-text q-input) -->
               <div class="col-12 col-md-6">
-                <q-input
-                  v-model="search"
-                  label="Search player by name…"
-                  outlined
+                <q-select
+                  v-model="selectedPlayer"
+                  :options="playerOptions"
+                  use-input
+                  fill-input
+                  hide-selected
                   clearable
-                  @keyup.enter="onSearch"
+                  outlined
+                  label="Search player by name…"
+                  input-debounce="0"
+                  behavior="menu"
+                  :loading="loading || optionsLoading"
+                  @filter="filterPlayers"
+                  @update:model-value="onSelectedPlayer"
                 >
                   <template #prepend>
                     <q-icon name="search" />
                   </template>
-                </q-input>
+
+                  <template #no-option>
+                    <q-item>
+                      <q-item-section class="text-grey-7">
+                        No matching players
+                      </q-item-section>
+                    </q-item>
+                  </template>
+
+                  <template #option="scope">
+                    <q-item v-bind="scope.itemProps">
+                      <q-item-section>
+                        <q-item-label class="text-weight-medium">
+                          {{ scope.opt.label }}
+                        </q-item-label>
+                        <q-item-label caption>
+                          {{ scope.opt.alliance || '—' }}
+                          • {{ (scope.opt.villages || 0).toLocaleString() }} villages
+                          • {{ (scope.opt.population || 0).toLocaleString() }} pop
+                        </q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </template>
+                </q-select>
               </div>
+
               <div class="col-12 col-md-6">
                 <q-btn
                   label="Go to Player"
                   color="primary"
                   icon="person"
                   unelevated
-                  @click="onSearch"
+                  @click="goToSelectedPlayer"
                   class="full-width"
+                  :disable="!selectedPlayer"
                 />
               </div>
             </div>
+
             <q-separator class="q-mb-md" />
+
             <q-input
               v-model="nameFilter"
               placeholder="Filter table by name…"
@@ -104,7 +140,9 @@
               </template>
             </q-input>
           </q-card-section>
+
           <q-separator />
+
           <q-card-section class="q-pa-none">
             <q-table
               :columns="columns"
@@ -132,6 +170,7 @@
                   </router-link>
                 </q-td>
               </template>
+
               <template #body-cell-alliance="props">
                 <q-td :props="props">
                   <q-chip
@@ -144,11 +183,13 @@
                   <span v-else class="text-grey-6">—</span>
                 </q-td>
               </template>
+
               <template #body-cell-population="props">
                 <q-td :props="props" class="text-right">
                   <strong class="text-primary">{{ props.value.toLocaleString() }}</strong>
                 </q-td>
               </template>
+
               <template #no-data>
                 <div class="text-center q-pa-xl">
                   <q-icon name="person_off" size="4rem" class="text-grey q-mb-md" />
@@ -156,6 +197,7 @@
                   <div class="text-body2 text-grey-7 q-mt-sm">Try adjusting your search or filter</div>
                 </div>
               </template>
+
               <template #loading>
                 <q-inner-loading showing color="primary" />
               </template>
@@ -172,52 +214,99 @@ import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from 'boot/axios'
 
-const router     = useRouter()
-const search     = ref('')
+const router = useRouter()
+
+/* -----------------------------
+ * State
+ * ----------------------------- */
+const players = ref([])
+const loading = ref(false)
+
 const nameFilter = ref('')
-const players    = ref([])
-const loading    = ref(false)
-const pagination = ref({ 
+
+const pagination = ref({
   sortBy: 'population',
   descending: true,
   page: 1,
   rowsPerPage: 20
 })
 
+/**
+ * Autocomplete state
+ * - selectedPlayer: selected option object (or null)
+ * - playerOptions: dropdown list
+ * - optionsLoading: local filtering busy flag
+ */
+const selectedPlayer = ref(null)
+const playerOptions = ref([])
+const optionsLoading = ref(false)
+
+/* -----------------------------
+ * Table columns
+ * ----------------------------- */
 const columns = [
-  { name: 'name',       label: 'Player',     field: 'name',       sortable: true },
-  { name: 'alliance',   label: 'Alliance',   field: 'alliance',   sortable: true },
-  { name: 'villages',   label: '# Villages', field: 'villages',   sortable: true, align: 'right' },
+  { name: 'name', label: 'Player', field: 'name', sortable: true },
+  { name: 'alliance', label: 'Alliance', field: 'alliance', sortable: true },
+  { name: 'villages', label: '# Villages', field: 'villages', sortable: true, align: 'right' },
   { name: 'population', label: 'Population', field: 'population', sortable: true, align: 'right' }
 ]
 
-function onSearch() {
-  const name = search.value.trim()
-  if (name) {
-    router.push({ name: 'player-detail', params: { name } })
-  }
+/* -----------------------------
+ * Navigation
+ * ----------------------------- */
+function goToSelectedPlayer() {
+  if (!selectedPlayer.value?.value) return
+  router.push({ name: 'player-detail', params: { name: selectedPlayer.value.value } })
 }
 
-function detailUrl(playerName) {
-  return router.resolve({
-    name: 'player-detail',
-    params: { name: playerName }
-  }).href
+function onSelectedPlayer(val) {
+  // Optional: navigate immediately on select
+  // If you'd rather require button click only, comment out the next 2 lines.
+  if (!val?.value) return
+  router.push({ name: 'player-detail', params: { name: val.value } })
 }
 
+/**
+ * QSelect filter: lets user type, but selection must come from options.
+ * (No free-typed name submission.)
+ */
+function filterPlayers(needle, update) {
+  update(() => {
+    optionsLoading.value = true
+    const n = (needle || '').trim().toLowerCase()
+
+    let list = (players.value || []).map(p => ({
+      label: p.name,
+      value: p.name,
+      alliance: p.alliance,
+      villages: p.villages,
+      population: p.population
+    }))
+
+    if (n) list = list.filter(o => (o.label || '').toLowerCase().includes(n))
+
+    // Keep results useful
+    list.sort((a, b) => Number(b.population || 0) - Number(a.population || 0))
+
+    playerOptions.value = list.slice(0, 40)
+    optionsLoading.value = false
+  })
+}
+
+/* -----------------------------
+ * Derived stats + filters
+ * ----------------------------- */
 const filteredPlayers = computed(() => {
   const f = nameFilter.value.trim().toLowerCase()
-  return players.value.filter(p =>
-    !f || p.name.toLowerCase().includes(f)
-  )
+  return (players.value || []).filter(p => !f || (p.name || '').toLowerCase().includes(f))
 })
 
 const totalVillages = computed(() => {
-  return filteredPlayers.value.reduce((sum, p) => sum + (p.villages || 0), 0)
+  return filteredPlayers.value.reduce((sum, p) => sum + Number(p.villages || 0), 0)
 })
 
 const totalPopulation = computed(() => {
-  return filteredPlayers.value.reduce((sum, p) => sum + (p.population || 0), 0)
+  return filteredPlayers.value.reduce((sum, p) => sum + Number(p.population || 0), 0)
 })
 
 const avgPopulation = computed(() => {
@@ -225,14 +314,27 @@ const avgPopulation = computed(() => {
   return Math.round(totalPopulation.value / filteredPlayers.value.length)
 })
 
-// Now simply fetch JSON!
+/* -----------------------------
+ * Load data
+ * ----------------------------- */
 async function loadPlayers() {
   loading.value = true
   try {
-    const { data } = await api.get("/api/players?limit=1000")
-    players.value = data
-  }
-  finally {
+    const { data } = await api.get('/api/players?limit=1000')
+    players.value = Array.isArray(data) ? data : []
+
+    // Seed initial autocomplete options (top by pop)
+    playerOptions.value = [...players.value]
+      .sort((a, b) => Number(b?.population || 0) - Number(a?.population || 0))
+      .slice(0, 40)
+      .map(p => ({
+        label: p.name,
+        value: p.name,
+        alliance: p.alliance,
+        villages: p.villages,
+        population: p.population
+      }))
+  } finally {
     loading.value = false
   }
 }
@@ -260,7 +362,7 @@ onActivated(loadPlayers)
   font-size: 3rem;
   font-weight: 700;
   margin: 0;
-  
+
   @media (max-width: 600px) {
     font-size: 2rem;
   }
@@ -270,7 +372,7 @@ onActivated(loadPlayers)
   font-size: 1.2rem;
   opacity: 0.95;
   margin: 0;
-  
+
   @media (max-width: 600px) {
     font-size: 1rem;
   }
@@ -287,7 +389,7 @@ onActivated(loadPlayers)
 .stat-card {
   transition: transform 0.2s, box-shadow 0.2s;
   height: 100%;
-  
+
   &:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
@@ -307,11 +409,11 @@ onActivated(loadPlayers)
   .q-table__top {
     padding: 1rem;
   }
-  
+
   .q-table tbody td {
     font-size: 0.95rem;
   }
-  
+
   .q-table tbody tr:hover {
     background-color: $grey-2;
   }
@@ -324,7 +426,7 @@ onActivated(loadPlayers)
   display: inline-flex;
   align-items: center;
   transition: color 0.2s;
-  
+
   &:hover {
     color: #d49a0f;
     text-decoration: underline;

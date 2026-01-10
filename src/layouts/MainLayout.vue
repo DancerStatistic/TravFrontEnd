@@ -122,6 +122,21 @@
           </q-item-section>
         </q-item>
 
+        <q-item
+  clickable
+  v-ripple
+  :to="{ name: 'trade-route' }"
+  :active="['trade-route', 'trade-route-alias'].includes($route.name)"
+  active-class="bg-primary text-white"
+>
+  <q-item-section avatar>
+    <q-icon name="swap_horiz" />
+  </q-item-section>
+  <q-item-section>
+    <q-item-label>Trade Routes</q-item-label>
+  </q-item-section>
+</q-item>
+
         <!-- Regions disabled for now -->
         <!--
         <q-item

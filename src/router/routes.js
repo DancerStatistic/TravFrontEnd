@@ -37,7 +37,10 @@ const routes = [
         { path: 'region/:name',     name: 'region-detail',
           component: () => import('pages/RegionDetail.vue'),
           props: true
-        }
+        },
+
+        { path: 'trade',      name: 'trade-route', component: () => import('pages/TradeRoutes.vue') },
+        { path: 'tradeRoute', name: 'trade-route-alias', component: () => import('pages/TradeRoutes.vue') },        
       ]
     },
 

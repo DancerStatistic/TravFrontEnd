@@ -1281,8 +1281,13 @@ const refInput = ref('0|0')
 const tribeOptions = [
   { label: 'Romans', value: 'romans' },
   { label: 'Teutons', value: 'teutons' },
-  { label: 'Gauls', value: 'gauls' }
-]
+  { label: 'Gauls', value: 'gauls' },
+  { label: 'Egyptians', value: 'egyptians' },
+  { label: 'Huns', value: 'huns' },
+  { label: 'Spartans', value: 'spartans' },
+  { label: 'Vikings', value: 'vikings' }
+];
+
 const tribe = ref('romans')
 const isSpeedServer = ref(false) // Travian "speed" servers (×2 unit speed)
 const tsLevel = ref(0) // Tournament Square level 0..20
@@ -1291,6 +1296,7 @@ const tsSpeedup = computed(() => 1 + tsLevel.value / 10)
 const TROOPS = Object.freeze({
   romans: [
     { key: 'legionnaire', label: 'Legionnaire', speed: 6 },
+    { key: 'legionnaire_new', label: 'Legionnaire (new)', speed: 7 },
     { key: 'praetorian', label: 'Praetorian', speed: 5 },
     { key: 'imperian', label: 'Imperian', speed: 7 },
     { key: 'equites_legati', label: 'Equites Legati', speed: 16 },
@@ -1327,8 +1333,43 @@ const TROOPS = Object.freeze({
     { key: 'chieftain', label: 'Chieftain', speed: 5 },
     { key: 'settler', label: 'Settler', speed: 5 },
     { key: 'merchant', label: 'Merchant', speed: 24, bold: true }
+  ],
+
+  // added based on the troop tables you provided
+  egyptians: [
+    { key: 'slave_militia', label: 'Slave Militia', speed: 7 },
+    { key: 'ash_warden', label: 'Ash Warden', speed: 6 },
+    { key: 'khopesh_warrior', label: 'Khopesh Warrior', speed: 7 },
+    { key: 'sopdu_explorer', label: 'Sopdu Explorer', speed: 16 },
+    { key: 'anhur_guard', label: 'Anhur Guard', speed: 15 },
+    { key: 'resheph_chariot', label: 'Resheph Chariot', speed: 10 }
+  ],
+  huns: [
+    { key: 'mercenary', label: 'Mercenary', speed: 7 },
+    { key: 'bowman', label: 'Bowman', speed: 6 },
+    { key: 'spotter', label: 'Spotter', speed: 19 },
+    { key: 'steppe_rider', label: 'Steppe Rider', speed: 16 },
+    { key: 'marksman', label: 'Marksman', speed: 15 },
+    { key: 'marauder', label: 'Marauder', speed: 14 }
+  ],
+  spartans: [
+    { key: 'hoplite', label: 'Hoplite', speed: 6 },
+    { key: 'sentinel', label: 'Sentinel', speed: 9 },
+    { key: 'shieldsman', label: 'Shieldsman', speed: 8 },
+    { key: 'twinsteel_therion', label: 'Twinsteel Therion', speed: 6 },
+    { key: 'elpida_rider', label: 'Elpida Rider', speed: 16 },
+    { key: 'corinthian_crusher', label: 'Corinthian Crusher', speed: 9 }
+  ],
+  vikings: [
+    { key: 'thrall', label: 'Thrall', speed: 7 },
+    { key: 'shield_maiden', label: 'Shield Maiden', speed: 7 },
+    { key: 'berserker', label: 'Berserker', speed: 5 },
+    { key: "heimdalls_eye", label: "Heimdall's Eye", speed: 9 },
+    { key: 'huskarl_riders', label: 'Huskarl Riders', speed: 12 },
+    { key: 'valkyrie', label: 'Valkyrie', speed: 9 }
   ]
-})
+});
+
 
 function formatHours(totalHours) {
   const tot = Math.max(0, Number(totalHours) || 0)
