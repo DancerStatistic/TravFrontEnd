@@ -1,5 +1,5 @@
 <template>
-  <q-page class="column alliance-detail-page">
+  <q-page class="column alliance-detail-page" :style-fn="(_, height) => ({ height: height + 'px' })">
     <!-- Toolbar -->
     <q-toolbar class="alliance-toolbar">
       <q-btn dense flat round icon="arrow_back" class="toolbar-btn" @click="$router.back()" />
@@ -308,18 +308,19 @@
 
             <div class="q-pa-md table-wrap">
               <q-table
-                :columns="columnsVisible"
-                :rows="villagesFiltered"
-                row-key="coords"
-                flat
-                class="villages-table"
-                :pagination.sync="pagination"
-                :rows-per-page-options="[10, 20, 50, 0]"
-                :filter="filter"
-                virtual-scroll
-                :virtual-scroll-sticky-size-start="44"
-                @row-click="(_, row) => centerFromCoords(row.coords)"
-              >
+                  style="height: 100%;"
+                  class="villages-table"
+                  :columns="columnsVisible"
+                  :rows="villagesFiltered"
+                  row-key="coords"
+                  flat
+                  :pagination.sync="pagination"
+                  :rows-per-page-options="[10, 20, 50, 0]"
+                  :filter="filter"
+                  virtual-scroll
+                  :virtual-scroll-sticky-size-start="44"
+                  @row-click="(_, row) => centerFromCoords(row.coords)"
+                >
                 <template #body-cell-village="props">
                   <q-td :props="props" class="cell-strong">
                     <div class="ellipsis">{{ props.row.village }}</div>
@@ -586,13 +587,14 @@ function unionBBox (a, b) {
   return { x, y, width: x2 - x, height: y2 - y }
 }
 function markersBBoxOrDefault () {
-  const g = markersGroup.value
-  if (g) {
+  const g = markersGroup.value || svg.value?.querySelector?.('#markersLayer')
+  if (g?.getBBox) {
     const bb = g.getBBox()
     if (bb && bb.width > 0 && bb.height > 0) return bb
   }
   return { x: -200, y: -200, width: 400, height: 400 }
 }
+
 function fitToContent () {
   const all = unionBBox(markersBBoxOrDefault(), { x: -200, y: -200, width: 400, height: 400 })
   fitToBBox(all, 1.02)
@@ -699,13 +701,47 @@ function exportCsv () {
 
 /* Mount & resize */
 let ro = null
+let didInitialFit = false
+
 function scheduleSafeFit () {
   requestAnimationFrame(() => {
-    const rect = getContainerRect()
-    if (rect) fitToContent()
+    requestAnimationFrame(() => {
+      const rect = getContainerRect()
+      if (!rect) return
+
+      if (!didInitialFit) {
+        fitToContent()
+        didInitialFit = true
+      }
+
+      updateLabels()
+    })
   })
 }
 watch(split, scheduleSafeFit)
+
+function fitWhenReady (tries = 20) {
+  requestAnimationFrame(() => {
+    const rect = getContainerRect()
+    const g = markersGroup.value || svg.value?.querySelector?.('#markersLayer')
+    const bb = g?.getBBox?.()
+
+    const rectOk = !!rect
+    const bboxOk = bb && bb.width > 0 && bb.height > 0
+
+    if (rectOk && (bboxOk || tries <= 0)) {
+      fitToContent()
+      updateLabels()
+      didInitialFit = true
+      return
+    }
+
+    fitWhenReady(tries - 1)
+  })
+}
+
+
+
 
 onMounted(async () => {
   loading.value = true
@@ -728,7 +764,7 @@ onMounted(async () => {
     await nextTick()
     normalizeMarkers()
     bindMarkerDelegatedEvents()
-
+    fitWhenReady()
     const listRes = await api.get(`/api/alliance/${encodeURIComponent(tag)}/villages`)
     villages.value = (listRes.data?.villages || []).map(r => ({
       village: r.village_name,
@@ -738,9 +774,7 @@ onMounted(async () => {
       player: r.player_name,
       tribe: r.tribe
     }))
-
-    scheduleSafeFit()
-    updateLabels()
+    await nextTick()
   } finally {
     loading.value = false
   }
@@ -755,6 +789,7 @@ onBeforeUnmount(() => {
 .alliance-detail-page {
   height: 100%;
   min-height: 0;
+  overflow: hidden;
   padding: 0;
   background: radial-gradient(1200px 800px at 20% 0%, rgba(0, 229, 255, 0.08), transparent 60%),
               radial-gradient(900px 600px at 90% 10%, rgba(123, 97, 255, 0.10), transparent 55%),
@@ -811,7 +846,15 @@ onBeforeUnmount(() => {
 .content-wrap {
   flex: 1;
   min-height: 0;
-  height: 100%;
+  overflow: hidden;   /* key: prevents content Y scrolling */
+  height: auto;
+  display: flex;          /* add */
+  flex-direction: column; /* add */
+}
+.alliance-splitter {
+  flex: 1;        /* add */
+  min-height: 0;
+  height: auto;   /* change from 100% */
 }
 .alliance-splitter :deep(.q-splitter__separator) {
   width: 10px;
@@ -827,7 +870,7 @@ onBeforeUnmount(() => {
 
 /* Panels */
 .panel {
-  height: calc(100vh - 96px);
+  height: 100%;
   min-height: 0;
   border-radius: 14px;
   overflow: hidden;
@@ -870,6 +913,7 @@ onBeforeUnmount(() => {
 .map-panel {
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 .map-area {
   position: relative;
@@ -964,6 +1008,8 @@ onBeforeUnmount(() => {
 .table-wrap {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .filter-input {
   flex: 1;
@@ -974,11 +1020,18 @@ onBeforeUnmount(() => {
   text-transform: none;
 }
 .villages-table {
-  border-radius: 12px;
-  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
+
+.villages-table :deep(.q-table__middle) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .villages-table :deep(.q-table__top),
-.villages-table :deep(.q-table__middle),
 .villages-table :deep(.q-table__bottom) {
   background: transparent;
 }

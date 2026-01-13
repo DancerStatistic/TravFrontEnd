@@ -163,3 +163,16 @@
     background-position: -200% 0;
   }
 }
+
+
+html, body, #q-app {
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-page-container {
+  height: 100%;
+  overflow: hidden;
+}
+
+body { margin: 0; }
