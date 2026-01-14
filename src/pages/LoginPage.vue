@@ -204,7 +204,7 @@ async function onSubmit() {
 }
 
 .bg-photo {
-  background: url('https://i.imgur.com/fUHXSao.png') center/cover no-repeat;
+  // background: url('https://i.imgur.com/fUHXSao.png') center/cover no-repeat;
   filter: saturate(115%) contrast(105%);
   transform: scale(1.06);
   animation: bg-kenburns 18s ease-in-out infinite alternate, hue-rotate 10s linear infinite;

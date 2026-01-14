@@ -162,12 +162,16 @@
               <template #body-cell-name="props">
                 <q-td :props="props">
                   <router-link
-                    :to="{ name: 'player-detail', params: { name: props.row.name } }"
-                    class="player-link"
-                  >
-                    <q-icon name="person" size="16px" class="q-mr-xs" />
-                    {{ props.row.name }}
-                  </router-link>
+  v-if="props.row?.name"
+  :to="{ name: 'player-detail', params: { name: props.row.name } }"
+  class="player-link"
+>
+  <q-icon name="person" size="16px" class="q-mr-xs" />
+  {{ props.row.name }}
+</router-link>
+
+<span v-else class="text-grey-6">Unknown</span>
+
                 </q-td>
               </template>
 
@@ -317,27 +321,36 @@ const avgPopulation = computed(() => {
 /* -----------------------------
  * Load data
  * ----------------------------- */
-async function loadPlayers() {
+ async function loadPlayers() {
   loading.value = true
   try {
     const { data } = await api.get('/api/players?limit=1000')
-    players.value = Array.isArray(data) ? data : []
 
-    // Seed initial autocomplete options (top by pop)
-    playerOptions.value = [...players.value]
-      .sort((a, b) => Number(b?.population || 0) - Number(a?.population || 0))
-      .slice(0, 40)
-      .map(p => ({
-        label: p.name,
-        value: p.name,
-        alliance: p.alliance,
-        villages: p.villages,
-        population: p.population
-      }))
+    const rows = Array.isArray(data) ? data : []
+
+    players.value = rows
+      .map((p) => {
+        const name =
+          (p?.name ?? p?.player_name ?? p?.playerName ?? p?.player)?.toString().trim() || ''
+
+        const alliance =
+          (p?.alliance ?? p?.alliance_tag ?? p?.allianceTag)?.toString().trim() || ''
+
+        return {
+          ...p,
+          name,          // REQUIRED by router + row-key
+          alliance,      // matches your columns.field
+          villages: Number(p?.villages ?? 0),
+          population: Number(p?.population ?? 0)
+        }
+      })
+      // Drop any bad rows that would crash routing
+      .filter((p) => p.name.length > 0)
   } finally {
     loading.value = false
   }
 }
+
 
 onMounted(loadPlayers)
 onActivated(loadPlayers)
