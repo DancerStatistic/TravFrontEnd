@@ -258,8 +258,29 @@
 
               <q-card-section>
                 <div v-if="loading">
-                  <q-skeleton v-for="i in 6" :key="i" type="QItem" class="q-mb-sm" />
-                </div>
+  <q-item v-for="i in 6" :key="i" class="q-mb-sm">
+    <q-item-section avatar>
+      <q-skeleton type="circle" size="30px" />
+    </q-item-section>
+
+    <q-item-section>
+      <q-item-label>
+        <q-skeleton type="text" width="65%" />
+      </q-item-label>
+      <q-item-label caption>
+        <q-skeleton type="text" width="45%" />
+      </q-item-label>
+    </q-item-section>
+
+    <q-item-section side class="text-right">
+      <q-skeleton type="text" width="52px" />
+      <div class="q-mt-xs">
+        <q-skeleton type="text" width="28px" />
+      </div>
+    </q-item-section>
+  </q-item>
+</div>
+
 
                 <q-list v-else dense padding class="top-list">
                   <q-item

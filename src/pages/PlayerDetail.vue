@@ -964,48 +964,70 @@ const raf2 = () => new Promise(r => requestAnimationFrame(() => requestAnimation
 function debugHistoryData(history) {
   console.group('Player History Debug')
   console.log('History data received:', history)
-  
-  if (history.length === 0) {
+
+  if (!Array.isArray(history) || history.length === 0) {
     console.warn('No history data available')
-  } else {
-    console.log(`Found ${history.length} days of data`)
-    
-    // Log first and last entry
-    console.log('First entry:', history[0])
-    if (history.length > 1) {
-      console.log('Last entry:', history[history.length - 1])
-    }
-    
-    // Check for required fields
-    const sample = history[0]
-    const requiredFields = ['date', 'population', 'villages']
-    const missingFields = requiredFields.filter(field => !(field in sample))
-    
-    if (missingFields.length > 0) {
-      console.error('Missing required fields:', missingFields)
-    }
-    
-    // Check date range
-    const dates = history.map(h => h.date).sort()
-    console.log('Date range:', dates[0], 'to', dates[dates.length - 1])
+    console.groupEnd()
+    return
   }
-  
+
+  console.log(`Found ${history.length} days of data`)
+
+  // Log first and last entry
+  console.log('First entry:', history[0])
+  if (history.length > 1) {
+    console.log('Last entry:', history[history.length - 1])
+  }
+
+  // Check data structure
+  const sample = history[0] || {}
+  const hasDate = !!(sample.date ?? sample.dump_date ?? sample.dumpDate)
+
+  const missingFields = []
+  if (!hasDate) missingFields.push('date')
+  if (!('population' in sample)) missingFields.push('population')
+  if (!('villages' in sample)) missingFields.push('villages')
+
+  if (missingFields.length > 0) {
+    console.error('Missing required fields:', missingFields)
+  }
+
+  // Check date range (supports both date and dump_date)
+  const dates = history
+    .map(h => (h.date ?? h.dump_date ?? h.dumpDate))
+    .filter(Boolean)
+    .sort()
+
+  console.log('Date range:', dates[0], 'to', dates[dates.length - 1])
+
   console.groupEnd()
 }
+
 
 async function loadPlayerHistory () {
   try {
     const response = await api.get(
       `/api/player/${encodeURIComponent(playerName.value)}/history`,
-      { params: { no_cache: 1 } } // optional; see backend note below
+      { params: { no_cache: 1 } }
     )
 
-    const history =
+    const rawHistory =
       response?.data?.data?.history ??
       response?.data?.history ??
       []
 
-    playerHistory.value = Array.isArray(history) ? history : []
+    const normalized = (Array.isArray(rawHistory) ? rawHistory : [])
+      .map((r) => {
+        const date = (r?.date ?? r?.dump_date ?? r?.dumpDate ?? '').toString()
+        return {
+          ...r,
+          date // <-- guarantees the field your frontend expects
+        }
+      })
+      // Optional safety: drop broken rows (prevents chart issues)
+      .filter(r => (r.date || '').trim().length > 0)
+
+    playerHistory.value = normalized
     debugHistoryData(playerHistory.value)
   } catch (err) {
     console.error('Error loading player history:', err)
@@ -1017,6 +1039,7 @@ async function loadPlayerHistory () {
     })
   }
 }
+
 
 
 

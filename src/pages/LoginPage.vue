@@ -1,11 +1,19 @@
 <template>
-  <q-page class="login-page">
+  <q-page class="login-page" @mousemove="onMouseMove" @mouseleave="onMouseLeave">
     <!-- Animated background layers -->
     <div class="bg-layer bg-photo" />
     <div class="bg-layer bg-vignette" />
     <div class="bg-layer bg-gradient" />
     <div class="bg-layer bg-noise" />
     <div class="bg-layer bg-grid" />
+
+    <!-- NEW: subtle “cursor glow” + parallax highlight -->
+    <div
+      class="bg-layer bg-cursorGlow"
+      :class="{ 'bg-cursorGlow--active': glowActive }"
+      :style="cursorGlowStyle"
+    />
+
     <div class="bg-layer bg-orbs">
       <span class="orb orb-1" />
       <span class="orb orb-2" />
@@ -14,9 +22,19 @@
 
     <!-- Centered card -->
     <div class="login-form-container">
-      <q-card class="login-card" flat>
+      <!-- NEW: gentle 3D tilt on pointer move -->
+      <q-card
+        class="login-card"
+        flat
+        :style="cardTiltStyle"
+        @mousemove="onCardMove"
+        @mouseleave="onCardLeave"
+      >
         <!-- Top glow line -->
         <div class="card-top-glow" />
+
+        <!-- NEW: inner highlight “specular” -->
+        <div class="card-specular" :style="specularStyle" />
 
         <q-card-section class="text-center q-pb-none">
           <div class="login-header">
@@ -28,9 +46,7 @@
               <span class="title-shine">Travian Status</span>
             </h1>
 
-            <p class="login-subtitle">
-              Sign in to access the analytics dashboard
-            </p>
+            <p class="login-subtitle">Sign in to access the analytics dashboard</p>
           </div>
         </q-card-section>
 
@@ -91,6 +107,7 @@
               color="primary"
               size="lg"
               :loading="loading"
+              :disable="loading"
             >
               <template #loading>
                 <div class="row items-center no-wrap q-gutter-sm">
@@ -99,6 +116,14 @@
                 </div>
               </template>
             </q-btn>
+
+            <!-- NEW: tiny “status” dot that animates while loading -->
+            <div class="login-status row items-center justify-center q-mt-md">
+              <span class="status-dot" :class="{ 'status-dot--loading': loading }" />
+              <span class="status-text">
+                {{ loading ? 'Authenticating…' : 'Secure session' }}
+              </span>
+            </div>
           </q-form>
         </q-card-section>
 
@@ -125,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 
@@ -139,12 +164,83 @@ const showPassword = ref(false);
 const router = useRouter();
 const $q = useQuasar();
 
+/* =========================
+   NEW: cursor glow layer
+   ========================= */
+const glowX = ref(50);
+const glowY = ref(45);
+const glowActive = ref(false);
+
+function onMouseMove(e) {
+  // page-relative, normalized to %
+  const rect = e.currentTarget?.getBoundingClientRect?.();
+  if (!rect) return;
+  const x = ((e.clientX - rect.left) / rect.width) * 100;
+  const y = ((e.clientY - rect.top) / rect.height) * 100;
+  glowX.value = Math.max(0, Math.min(100, x));
+  glowY.value = Math.max(0, Math.min(100, y));
+  glowActive.value = true;
+}
+
+function onMouseLeave() {
+  glowActive.value = false;
+}
+
+/* =========================
+   NEW: card tilt + specular
+   ========================= */
+const tiltX = ref(0);
+const tiltY = ref(0);
+const specX = ref(50);
+const specY = ref(30);
+
+function onCardMove(e) {
+  // keep this cheap: only on card hover
+  const el = e.currentTarget;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const px = (e.clientX - rect.left) / rect.width; // 0..1
+  const py = (e.clientY - rect.top) / rect.height; // 0..1
+
+  // tilt range
+  const max = 6; // degrees
+  tiltY.value = (px - 0.5) * max * 2; // left/right
+  tiltX.value = -(py - 0.5) * max * 2; // up/down
+
+  // specular follows pointer
+  specX.value = px * 100;
+  specY.value = py * 100;
+}
+
+function onCardLeave() {
+  tiltX.value = 0;
+  tiltY.value = 0;
+  specX.value = 50;
+  specY.value = 30;
+}
+
+const cursorGlowStyle = computed(() => ({
+  '--glow-x': `${glowX.value}%`,
+  '--glow-y': `${glowY.value}%`,
+}));
+
+const cardTiltStyle = computed(() => ({
+  transform: `perspective(900px) rotateX(${tiltX.value}deg) rotateY(${tiltY.value}deg) translateZ(0)`,
+}));
+
+const specularStyle = computed(() => ({
+  '--spec-x': `${specX.value}%`,
+  '--spec-y': `${specY.value}%`,
+}));
+
 async function onSubmit() {
   error.value = '';
 
   // Basic validation
   if (!username.value || !password.value) {
     error.value = 'Please enter both email and password';
+    // NEW: a tiny shake when invalid
+    bumpShake();
     return;
   }
 
@@ -152,6 +248,7 @@ async function onSubmit() {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(username.value)) {
     error.value = 'Please enter a valid email address';
+    bumpShake();
     return;
   }
 
@@ -159,7 +256,6 @@ async function onSubmit() {
 
   try {
     // TODO: Implement actual API login
-    // For now, simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     $q.notify({
@@ -176,9 +272,22 @@ async function onSubmit() {
       message: error.value,
       position: 'top',
     });
+    bumpShake();
   } finally {
     loading.value = false;
   }
+}
+
+/* NEW: shake helper (pure DOM class toggle, short + cheap) */
+function bumpShake() {
+  const el = document.querySelector('.login-card');
+  if (!el) return;
+  el.classList.remove('is-shaking');
+  // force reflow so animation re-triggers
+  // eslint-disable-next-line no-unused-expressions
+  el.offsetHeight;
+  el.classList.add('is-shaking');
+  window.setTimeout(() => el.classList.remove('is-shaking'), 380);
 }
 </script>
 
@@ -211,7 +320,12 @@ async function onSubmit() {
 }
 
 .bg-vignette {
-  background: radial-gradient(ellipse at center, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.82) 70%, rgba(0,0,0,0.92) 100%);
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.35) 0%,
+    rgba(0, 0, 0, 0.82) 70%,
+    rgba(0, 0, 0, 0.92) 100%
+  );
   z-index: 2;
 }
 
@@ -237,11 +351,35 @@ async function onSubmit() {
   pointer-events: none;
   opacity: 0.12;
   background-image:
-    linear-gradient(rgba(255,255,255,0.10) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.10) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.10) 1px, transparent 1px);
   background-size: 52px 52px;
-  mask-image: radial-gradient(circle at 50% 45%, rgba(0,0,0,1) 0%, rgba(0,0,0,.8) 35%, rgba(0,0,0,0) 70%);
+  mask-image: radial-gradient(circle at 50% 45%, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, .8) 35%, rgba(0, 0, 0, 0) 70%);
   animation: grid-slide 16s linear infinite;
+}
+
+/* NEW: cursor-follow glow (very modern, very subtle) */
+.bg-cursorGlow {
+  z-index: 5; /* between grid + orbs */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  background:
+    radial-gradient(
+      520px 420px at var(--glow-x, 50%) var(--glow-y, 45%),
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.00) 60%
+    ),
+    radial-gradient(
+      760px 560px at calc(var(--glow-x, 50%) + 6%) calc(var(--glow-y, 45%) + 8%),
+      rgba(0, 170, 255, 0.09),
+      rgba(0, 170, 255, 0.00) 62%
+    );
+  mix-blend-mode: screen;
+}
+
+.bg-cursorGlow--active {
+  opacity: 1;
 }
 
 .bg-orbs {
@@ -318,6 +456,15 @@ async function onSubmit() {
 
   /* Entry animation */
   animation: card-in 700ms cubic-bezier(.2,.9,.2,1) both;
+
+  /* NEW: help make tilt look crisp */
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* NEW: invalid shake */
+.login-card.is-shaking {
+  animation: card-shake 360ms ease both;
 }
 
 .card-top-glow {
@@ -331,10 +478,28 @@ async function onSubmit() {
   animation: shine-sweep 3.2s ease-in-out infinite;
 }
 
+/* NEW: pointer-follow “specular highlight” inside the card */
+.card-specular {
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      420px 320px at var(--spec-x, 50%) var(--spec-y, 30%),
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.00) 60%
+    );
+  opacity: 0.75;
+  mix-blend-mode: screen;
+}
+
 .login-header {
   padding: 2rem 0 1rem;
   animation: fade-up 650ms ease both;
   animation-delay: 120ms;
+  position: relative;
+  z-index: 1;
 }
 
 .icon-badge {
@@ -389,6 +554,8 @@ async function onSubmit() {
   padding: 0;
   animation: fade-up 700ms ease both;
   animation-delay: 170ms;
+  position: relative;
+  z-index: 1;
 }
 
 /* =========================
@@ -483,10 +650,39 @@ async function onSubmit() {
   }
 }
 
+/* NEW: tiny status row */
+.login-status {
+  gap: 10px;
+  opacity: 0.9;
+  user-select: none;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.10);
+  transform: translateZ(0);
+}
+
+.status-dot--loading {
+  animation: dot-pulse 900ms ease-in-out infinite;
+  background: rgba($primary, 0.9);
+  box-shadow: 0 0 0 3px rgba($primary, 0.18), 0 0 18px rgba($primary, 0.35);
+}
+
+.status-text {
+  font-size: 12px;
+  color: rgba(255,255,255,0.70);
+}
+
 .login-info {
   padding: 1rem 0;
   animation: fade-up 750ms ease both;
   animation-delay: 220ms;
+  position: relative;
+  z-index: 1;
 }
 
 .info-link {
@@ -510,6 +706,7 @@ async function onSubmit() {
   .bg-gradient,
   .bg-grid,
   .bg-noise,
+  .bg-cursorGlow,
   .orb,
   .card-top-glow,
   .login-card,
@@ -518,9 +715,14 @@ async function onSubmit() {
   .login-info,
   .login-icon,
   .title-shine::after,
-  .login-submit::after {
+  .login-submit::after,
+  .status-dot--loading {
     animation: none !important;
     transition: none !important;
+  }
+
+  .login-card {
+    transform: none !important;
   }
 }
 
@@ -579,6 +781,15 @@ async function onSubmit() {
   }
 }
 
+@keyframes card-shake {
+  0% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-8px, 0, 0); }
+  40% { transform: translate3d(7px, 0, 0); }
+  60% { transform: translate3d(-6px, 0, 0); }
+  80% { transform: translate3d(5px, 0, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
 @keyframes fade-up {
   0% { opacity: 0; transform: translate3d(0, 10px, 0); }
   100% { opacity: 1; transform: translate3d(0, 0, 0); }
@@ -613,6 +824,12 @@ async function onSubmit() {
   100% { transform: translateX(320%) rotate(18deg); }
 }
 
+@keyframes dot-pulse {
+  0% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.35); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.9; }
+}
+
 /* =========================
    Responsive tweaks
    ========================= */
@@ -620,6 +837,7 @@ async function onSubmit() {
   .login-card {
     max-width: 100%;
     margin: 1rem;
+    transform: none !important; /* avoid tilt weirdness on small screens */
   }
 
   .login-title {

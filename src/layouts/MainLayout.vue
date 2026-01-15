@@ -137,6 +137,21 @@
   </q-item-section>
 </q-item>
 
+<q-item
+  clickable
+  v-ripple
+  :to="{ name: 'dash-page' }"
+  :active="['dash-page', 'dashboard-page'].includes($route.name)"
+  active-class="bg-primary text-white"
+>
+  <q-item-section avatar>
+    <q-icon name="swap_horiz" />
+  </q-item-section>
+  <q-item-section>
+    <q-item-label>Dashboard</q-item-label>
+  </q-item-section>
+</q-item>
+
         <!-- Regions disabled for now -->
         <!--
         <q-item

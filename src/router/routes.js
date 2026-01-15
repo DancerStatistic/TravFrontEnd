@@ -40,7 +40,11 @@ const routes = [
         },
 
         { path: 'trade',      name: 'trade-route', component: () => import('pages/TradeRoutes.vue') },
-        { path: 'tradeRoute', name: 'trade-route-alias', component: () => import('pages/TradeRoutes.vue') },        
+        { path: 'tradeRoute', name: 'trade-route-alias', component: () => import('pages/TradeRoutes.vue') },   
+        
+        { path: 'dash',      name: 'dash-page', component: () => import('pages/dashboard/MainDashboard.vue') },
+        { path: 'dashBoard', name: 'dashboard-page', component: () => import('pages/dashboard/MainDashboard.vue') },        
+  
       ]
     },
 

@@ -42,7 +42,7 @@
 
           <q-tab-panels v-model="tab" animated class="side__panels">
             <!-- SCOPE -->
-            <q-tab-panel name="scope" class="q-pa-md">
+            <q-tab-panel name="scope" class="q-pa-md side__panel">
               <q-card flat bordered class="panel-card">
                 <q-card-section class="panel-card__head">
                   <div class="text-subtitle2">Load villages</div>
@@ -78,6 +78,8 @@
                         use-input
                         clearable
                         input-debounce="150"
+                        emit-value
+                        map-options
                         option-label="label"
                         option-value="value"
                         :options="allianceOptionsFiltered"
@@ -96,6 +98,8 @@
                         use-input
                         clearable
                         input-debounce="150"
+                        emit-value
+                        map-options
                         option-label="label"
                         option-value="value"
                         :options="playerOptionsFiltered"
@@ -116,19 +120,13 @@
                     </div>
 
                     <div class="col-12">
-                      <q-slider
-                        v-model="maxVillages"
-                        :min="200"
-                        :max="20000"
-                        :step="100"
-                        label
-                        label-always
-                        dense
-                      />
+                      <q-slider v-model="maxVillages" :min="200" :max="20000" :step="100" label label-always dense />
                       <div class="text-caption text-grey-5">
                         Max villages to request: <b>{{ maxVillages.toLocaleString() }}</b>
                         <span class="q-ml-sm">·</span>
-                        <span class="q-ml-sm">If the backend supports limit, it’s applied there; otherwise we downsample client-side.</span>
+                        <span class="q-ml-sm">
+                          If the backend supports limit, it’s applied there; otherwise we downsample client-side.
+                        </span>
                       </div>
                     </div>
 
@@ -182,7 +180,8 @@
                 </q-card-section>
               </q-card>
 
-              <q-card flat bordered class="panel-card q-mt-md">
+              <!-- Search/select villages -->
+              <q-card flat bordered class="panel-card q-mt-md panel-card--flex">
                 <q-card-section class="panel-card__head">
                   <div class="text-subtitle2">Search & select villages</div>
                   <q-space />
@@ -193,14 +192,8 @@
 
                 <q-separator />
 
-                <q-card-section class="q-gutter-sm">
-                  <q-input
-                    v-model="villageSearch"
-                    dense
-                    filled
-                    clearable
-                    placeholder="Search by village / player / alliance…"
-                  >
+                <q-card-section class="q-gutter-sm panel-card__body">
+                  <q-input v-model="villageSearch" dense filled clearable placeholder="Search by village / player / alliance…">
                     <template #prepend><q-icon name="search" /></template>
                   </q-input>
 
@@ -224,7 +217,7 @@
                         icon="deselect"
                         label="Clear selection"
                         :disable="!selectedVillageIds.size"
-                        @click="selectedVillageIds.clear()"
+                        @click="clearSelection"
                       />
                     </div>
                   </div>
@@ -248,13 +241,7 @@
                         </div>
                       </div>
 
-                      <q-btn
-                        dense
-                        flat
-                        round
-                        icon="center_focus_strong"
-                        @click.stop="centerOnVillage(v)"
-                      >
+                      <q-btn dense flat round icon="center_focus_strong" @click.stop="centerOnVillage(v)">
                         <q-tooltip>Center</q-tooltip>
                       </q-btn>
                     </div>
@@ -273,9 +260,7 @@
                 <q-card-section class="panel-card__head">
                   <div class="text-subtitle2">Simulation</div>
                   <q-space />
-                  <q-chip dense square color="grey-8" text-color="white">
-                    t={{ formatClock(simClockSeconds) }}
-                  </q-chip>
+                  <q-chip dense square color="grey-8" text-color="white"> t={{ formatClock(simClockSeconds) }} </q-chip>
                 </q-card-section>
 
                 <q-separator />
@@ -292,19 +277,8 @@
                   />
 
                   <div class="row items-center q-gutter-sm">
-                    <q-slider
-                      v-model="speed"
-                      :min="0"
-                      :max="10"
-                      :step="1"
-                      label
-                      label-always
-                      dense
-                      class="col"
-                    />
-                    <q-chip dense square color="grey-8" text-color="white">
-                      ×{{ speed }}
-                    </q-chip>
+                    <q-slider v-model="speed" :min="0" :max="10" :step="1" label label-always dense class="col" />
+                    <q-chip dense square color="grey-8" text-color="white">×{{ speed }}</q-chip>
                   </div>
 
                   <div class="row q-col-gutter-sm">
@@ -319,20 +293,12 @@
                       />
                     </div>
                     <div class="col">
-                      <q-btn
-                        outline
-                        class="full-width"
-                        icon="pause"
-                        label="Pause"
-                        :disable="!simRunning"
-                        @click="stopSim"
-                      />
+                      <q-btn outline class="full-width" icon="pause" label="Pause" :disable="!simRunning" @click="stopSim" />
                     </div>
                   </div>
 
                   <q-banner rounded class="bg-grey-10 text-grey-2">
-                    Pick villages on the left. This page keeps the rendering fast by drawing villages on a canvas and
-                    only updating on animation frames.
+                    Select 2+ villages to see a route and moving traders.
                   </q-banner>
                 </q-card-section>
               </q-card>
@@ -353,28 +319,10 @@
                   <q-toggle v-model="showLabels" dense label="Labels (selected only)" />
                   <q-toggle v-model="showRings" dense label="Rings (selected only)" />
 
-                  <q-slider
-                    v-model="pointSize"
-                    :min="1"
-                    :max="6"
-                    :step="1"
-                    dense
-                    label
-                    label-always
-                  />
+                  <q-slider v-model="pointSize" :min="1" :max="6" :step="1" dense label label-always />
 
-                  <q-slider
-                    v-model="inactiveAlpha"
-                    :min="0.05"
-                    :max="1"
-                    :step="0.05"
-                    dense
-                    label
-                    label-always
-                  >
-                    <template #label>
-                      Inactive alpha: {{ inactiveAlpha.toFixed(2) }}
-                    </template>
+                  <q-slider v-model="inactiveAlpha" :min="0.05" :max="1" :step="0.05" dense label label-always>
+                    <template #label>Inactive alpha: {{ inactiveAlpha.toFixed(2) }}</template>
                   </q-slider>
                 </q-card-section>
               </q-card>
@@ -386,7 +334,6 @@
       <!-- RIGHT -->
       <template #after>
         <section class="stage">
-          <!-- TOP HUD (replicates global map feel) -->
           <div class="hud">
             <div class="hud__row">
               <q-btn dense flat round icon="home" @click="fitToVillages">
@@ -433,11 +380,10 @@
             </div>
           </div>
 
-          <!-- CANVAS LAYERS -->
           <div class="canvas-wrap" ref="wrapEl">
             <canvas ref="bgCanvas" class="layer" />
             <canvas ref="fgCanvas" class="layer" />
-            <!-- tiny svg overlay just for labels/rings (optional) -->
+
             <svg ref="overlaySvg" class="overlay" @pointermove="onPointerMove" @pointerleave="onPointerLeave">
               <g :transform="overlayTransform">
                 <template v-if="showRings">
@@ -484,7 +430,7 @@
       </template>
     </q-splitter>
 
-    <!-- MOBILE: stack -->
+    <!-- MOBILE -->
     <div v-else class="mobile">
       <div class="q-pa-md">
         <q-banner rounded class="bg-grey-10 text-grey-2">
@@ -511,20 +457,20 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useQuasar } from 'quasar'
-import * as d3 from 'd3'
 import { api } from 'boot/axios'
+import { select } from 'd3-selection'
+import { zoom as d3zoom, zoomIdentity } from 'd3-zoom'
+import 'd3-transition'
 
 /**
  * World bounds: match your global map (-200..200).
- * Canvas renderer maps world->screen using the same d3-zoom transform.
  */
 const MAP_MIN = -200
 const MAP_MAX = 200
-const MAP_SIZE = MAP_MAX - MAP_MIN
 
-// Zoom limits (similar feel to your global map)
+// Zoom limits
 const MAX_ZOOM_OUT_PERCENT = 50
-const MIN_ZOOM = 1 / (MAX_ZOOM_OUT_PERCENT / 100) // ~0.558
+const MIN_ZOOM = 1 / (MAX_ZOOM_OUT_PERCENT / 100) // ~0.5
 const MAX_ZOOM = 50
 
 const $q = useQuasar()
@@ -546,7 +492,6 @@ const scopeModeOptions = [
   { label: 'Players', value: 'players' },
   { label: 'Region', value: 'region' }
 ]
-
 const selectedAlliances = ref([])
 const selectedPlayers = ref([])
 const regionName = ref('')
@@ -570,11 +515,10 @@ const clockModeOptions = [
 const speed = ref(1)
 const simClockSeconds = ref(0)
 const simRunning = ref(false)
-let simTimer = null
 
 /* Villages */
-const villages = ref([]) // {id,name,x,y,player,alliance}
-const byId = computed(() => new Map(villages.value.map(v => [v.id, v])))
+const villages = ref([])
+const byId = computed(() => new Map(villages.value.map((v) => [String(v.id), v])))
 const selectedVillageIds = reactive(new Set())
 
 /* Search list */
@@ -582,51 +526,65 @@ const villageSearch = ref('')
 const visibleVillages = computed(() => {
   const q = (villageSearch.value || '').trim().toLowerCase()
   if (!q) return villages.value
-  return villages.value.filter(v => {
-    return (
-      String(v.name || '').toLowerCase().includes(q) ||
-      String(v.player || '').toLowerCase().includes(q) ||
-      String(v.alliance || '').toLowerCase().includes(q) ||
-      `${v.x}|${v.y}`.includes(q)
-    )
+  return villages.value.filter((v) => {
+    const name = String(v.name || '').toLowerCase()
+    const player = String(v.player || '').toLowerCase()
+    const alliance = String(v.alliance || '').toLowerCase()
+    return name.includes(q) || player.includes(q) || alliance.includes(q) || `${v.x}|${v.y}`.includes(q)
   })
 })
 const visibleVillagesLimited = computed(() => visibleVillages.value.slice(0, 250))
 
 function toggleVillageSelected(id) {
-  if (selectedVillageIds.has(id)) selectedVillageIds.delete(id)
-  else selectedVillageIds.add(id)
-  renderAll()
+  const key = String(id)
+  if (selectedVillageIds.has(key)) selectedVillageIds.delete(key)
+  else selectedVillageIds.add(key)
+  scheduleRender()
+}
+function clearSelection() {
+  selectedVillageIds.clear()
+  scheduleRender()
 }
 function centerOnVillage(v) {
   centerAt(v.x, v.y)
 }
 function selectVisibleVillages() {
-  visibleVillages.value.forEach(v => selectedVillageIds.add(v.id))
-  renderAll()
+  visibleVillages.value.forEach((v) => selectedVillageIds.add(String(v.id)))
+  scheduleRender()
 }
+
+/**
+ * ROUTES
+ * IMPORTANT: watch actual IDs (sorted) so routes update even if size doesn't change.
+ */
+const selectedIdsSorted = computed(() => Array.from(selectedVillageIds).map(String).sort())
+const routes = ref([]) // [{ aId, bId }]
+function rebuildRoutes() {
+  const ids = selectedIdsSorted.value
+  const out = []
+  for (let i = 0; i < ids.length - 1; i++) out.push({ aId: ids[i], bId: ids[i + 1] })
+  routes.value = out
+}
+watch(selectedIdsSorted, rebuildRoutes, { immediate: true })
 
 /* Alliance / Player options */
 const allianceOptionsAll = ref([])
 const playerOptionsAll = ref([])
-
 const allianceOptionsFiltered = ref([])
 const playerOptionsFiltered = ref([])
 
 function filterAllianceOptions(val, update) {
   update(() => {
     const q = (val || '').toLowerCase()
-    allianceOptionsFiltered.value = !q
-      ? allianceOptionsAll.value
-      : allianceOptionsAll.value.filter(o => o.label.toLowerCase().includes(q))
+    const src = Array.isArray(allianceOptionsAll.value) ? allianceOptionsAll.value : []
+    allianceOptionsFiltered.value = !q ? src : src.filter((o) => String(o?.label || '').toLowerCase().includes(q))
   })
 }
 function filterPlayerOptions(val, update) {
   update(() => {
     const q = (val || '').toLowerCase()
-    playerOptionsFiltered.value = !q
-      ? playerOptionsAll.value
-      : playerOptionsAll.value.filter(o => o.label.toLowerCase().includes(q))
+    const src = Array.isArray(playerOptionsAll.value) ? playerOptionsAll.value : []
+    playerOptionsFiltered.value = !q ? src : src.filter((o) => String(o?.label || '').toLowerCase().includes(q))
   })
 }
 
@@ -643,16 +601,30 @@ const cursor = reactive({ x: 0, y: 0 })
 const hoverTip = reactive({ show: false, x: 0, y: 0, v: null })
 
 let zoom = null
-let transform = d3.zoomIdentity
+let transform = zoomIdentity
 const zoomK = ref(1)
 const zoomSlider = ref(100)
 
 const overlayTransform = computed(() => `translate(${transform.x},${transform.y}) scale(${transform.k})`)
 
+/**
+ * PERFORMANCE FIX (choppy pan):
+ * 1) Don’t cancel/reschedule RAF repeatedly (that causes jitter under continuous zoom events + sim RAF).
+ *    Use a "pending" flag so we render at most once per frame.
+ * 2) Avoid per-point worldToScreen() calls: draw in world coords by applying the d3 transform to the canvas context.
+ *    This removes thousands of applyX/applyY calls per frame.
+ */
 let rafRender = 0
+let renderPending = false
+let canvasDpr = 1
+
 function scheduleRender() {
-  cancelAnimationFrame(rafRender)
-  rafRender = requestAnimationFrame(renderAll)
+  if (renderPending) return
+  renderPending = true
+  rafRender = requestAnimationFrame(() => {
+    renderPending = false
+    renderAll()
+  })
 }
 
 function resizeCanvases() {
@@ -662,15 +634,14 @@ function resizeCanvases() {
   const w = Math.max(1, Math.floor(r.width))
   const h = Math.max(1, Math.floor(r.height))
 
+  canvasDpr = window.devicePixelRatio || 1
+
   for (const c of [bgCanvas.value, fgCanvas.value]) {
     if (!c) continue
-    const dpr = window.devicePixelRatio || 1
-    c.width = Math.floor(w * dpr)
-    c.height = Math.floor(h * dpr)
+    c.width = Math.floor(w * canvasDpr)
+    c.height = Math.floor(h * canvasDpr)
     c.style.width = w + 'px'
     c.style.height = h + 'px'
-    const ctx = c.getContext('2d')
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   }
 
   if (overlaySvg.value) {
@@ -679,28 +650,22 @@ function resizeCanvases() {
     overlaySvg.value.setAttribute('viewBox', `0 0 ${w} ${h}`)
   }
 
-  // Update zoom extent to replicate global-map feel
   if (zoom && wrapEl.value) {
-    zoom.extent([[0, 0], [w, h]])
-    // translateExtent in WORLD coords: stops pan jump
-    zoom.translateExtent([[MAP_MIN - 30, MAP_MIN - 30], [MAP_MAX + 30, MAP_MAX + 30]])
+    zoom.extent([
+      [0, 0],
+      [w, h]
+    ])
+    zoom.translateExtent([
+      [MAP_MIN - 30, MAP_MIN - 30],
+      [MAP_MAX + 30, MAP_MAX + 30]
+    ])
   }
 
   scheduleRender()
 }
 
-function worldToScreen(x, y) {
-  return {
-    x: transform.applyX(x),
-    y: transform.applyY(y)
-  }
-}
-
 function screenToWorld(px, py) {
-  return {
-    x: transform.invertX(px),
-    y: transform.invertY(py)
-  }
+  return { x: transform.invertX(px), y: transform.invertY(py) }
 }
 
 function syncSliderFromZoom() {
@@ -732,9 +697,8 @@ function centerAt(x, y, k) {
   const kk = Number.isFinite(k) ? k : transform.k
   const tx = r.width / 2 - kk * x
   const ty = r.height / 2 - kk * y
-  const t = d3.zoomIdentity.translate(tx, ty).scale(kk)
-
-  d3.select(wrapEl.value).transition().duration(220).call(zoom.transform, t)
+  const t = zoomIdentity.translate(tx, ty).scale(kk)
+  select(wrapEl.value).transition().duration(220).call(zoom.transform, t)
 }
 
 function fitToVillages() {
@@ -742,14 +706,22 @@ function fitToVillages() {
   const r = wrapEl.value.getBoundingClientRect()
   const pad = 20
 
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
-  villages.value.forEach(v => {
-    minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x)
-    minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y)
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity
+
+  villages.value.forEach((v) => {
+    minX = Math.min(minX, v.x)
+    maxX = Math.max(maxX, v.x)
+    minY = Math.min(minY, v.y)
+    maxY = Math.max(maxY, v.y)
   })
 
-  minX = Math.max(MAP_MIN, minX); maxX = Math.min(MAP_MAX, maxX)
-  minY = Math.max(MAP_MIN, minY); maxY = Math.min(MAP_MAX, maxY)
+  minX = Math.max(MAP_MIN, minX)
+  maxX = Math.min(MAP_MAX, maxX)
+  minY = Math.max(MAP_MIN, minY)
+  maxY = Math.min(MAP_MAX, maxY)
 
   const wWorld = Math.max(1e-6, maxX - minX)
   const hWorld = Math.max(1e-6, maxY - minY)
@@ -758,16 +730,32 @@ function fitToVillages() {
   const ky = (r.height - pad * 2) / hWorld
   const k = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(kx, ky)))
 
-  const cx = (minX + maxX) / 2
-  const cy = (minY + maxY) / 2
-  centerAt(cx, cy, k)
+  centerAt((minX + maxX) / 2, (minY + maxY) / 2, k)
 }
 
 function resetView() {
   centerAt(0, 0, 1)
 }
 
-/* Rendering (fast) */
+/* Rendering */
+function clearCanvas(ctx, wrapRect) {
+  // clear in device pixels reliably
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, Math.floor(wrapRect.width * canvasDpr), Math.floor(wrapRect.height * canvasDpr))
+}
+
+function applyWorldTransform(ctx) {
+  // draw in WORLD coords by applying d3 transform (and dpr) to the context
+  ctx.setTransform(
+    canvasDpr * transform.k,
+    0,
+    0,
+    canvasDpr * transform.k,
+    canvasDpr * transform.x,
+    canvasDpr * transform.y
+  )
+}
+
 function renderAll() {
   renderBackground()
   renderVillages()
@@ -775,117 +763,153 @@ function renderAll() {
 
 function renderBackground() {
   const c = bgCanvas.value
-  if (!c) return
-  const ctx = c.getContext('2d')
   const wrap = wrapEl.value
-  if (!wrap) return
+  if (!c || !wrap) return
+  const ctx = c.getContext('2d')
   const r = wrap.getBoundingClientRect()
 
-  ctx.clearRect(0, 0, r.width, r.height)
+  clearCanvas(ctx, r)
 
-  // Axes
+  // draw in world coords
+  applyWorldTransform(ctx)
+
   if (showAxes.value) {
     ctx.save()
     ctx.globalAlpha = 0.15
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    const p0 = worldToScreen(MAP_MIN - 1000, 0)
-    const p1 = worldToScreen(MAP_MAX + 1000, 0)
-    ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y)
-
-    const p2 = worldToScreen(0, MAP_MIN - 1000)
-    const p3 = worldToScreen(0, MAP_MAX + 1000)
-    ctx.moveTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y)
+    ctx.lineWidth = 1 / Math.max(0.001, transform.k) // keep roughly constant on screen
     ctx.strokeStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.moveTo(MAP_MIN - 1000, 0)
+    ctx.lineTo(MAP_MAX + 1000, 0)
+    ctx.moveTo(0, MAP_MIN - 1000)
+    ctx.lineTo(0, MAP_MAX + 1000)
     ctx.stroke()
     ctx.restore()
   }
 
-  // Grid (world-space grid like your global map)
   if (showGrid.value) {
     ctx.save()
     ctx.globalAlpha = 0.08
     ctx.strokeStyle = '#ffffff'
-    ctx.lineWidth = 1
-
+    ctx.lineWidth = 1 / Math.max(0.001, transform.k) // constant-ish on screen
     const step = 10
+
     for (let x = MAP_MIN; x <= MAP_MAX; x += step) {
-      const a = worldToScreen(x, MAP_MIN)
-      const b = worldToScreen(x, MAP_MAX)
       ctx.beginPath()
-      ctx.moveTo(a.x, a.y)
-      ctx.lineTo(b.x, b.y)
+      ctx.moveTo(x, MAP_MIN)
+      ctx.lineTo(x, MAP_MAX)
       ctx.stroke()
     }
     for (let y = MAP_MIN; y <= MAP_MAX; y += step) {
-      const a = worldToScreen(MAP_MIN, y)
-      const b = worldToScreen(MAP_MAX, y)
       ctx.beginPath()
-      ctx.moveTo(a.x, a.y)
-      ctx.lineTo(b.x, b.y)
+      ctx.moveTo(MAP_MIN, y)
+      ctx.lineTo(MAP_MAX, y)
       ctx.stroke()
     }
     ctx.restore()
   }
 
-  // World bounds
+  // world bounds box
   ctx.save()
   ctx.globalAlpha = 0.25
   ctx.strokeStyle = '#00ffff'
-  ctx.setLineDash([6, 5])
-  ctx.lineWidth = 2
-  const tl = worldToScreen(MAP_MIN, MAP_MIN)
-  const br = worldToScreen(MAP_MAX, MAP_MAX)
-  ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
+  ctx.lineWidth = 2 / Math.max(0.001, transform.k)
+  ctx.setLineDash([6 / Math.max(0.001, transform.k), 5 / Math.max(0.001, transform.k)])
+  ctx.strokeRect(MAP_MIN, MAP_MIN, MAP_MAX - MAP_MIN, MAP_MAX - MAP_MIN)
   ctx.restore()
 }
 
 function renderVillages() {
   const c = fgCanvas.value
-  if (!c) return
-  const ctx = c.getContext('2d')
   const wrap = wrapEl.value
-  if (!wrap) return
+  if (!c || !wrap) return
+  const ctx = c.getContext('2d')
   const r = wrap.getBoundingClientRect()
 
-  ctx.clearRect(0, 0, r.width, r.height)
+  clearCanvas(ctx, r)
+  applyWorldTransform(ctx)
 
-  // Small performance trick: avoid drawing ultra-tiny points when zoomed far out
   const base = pointSize.value
-  const radius = Math.max(0.75, base * Math.max(0.7, Math.min(1.6, transform.k ** 0.15)))
+  // radius in WORLD units so it stays mostly stable visually (slight zoom influence)
+  const radiusWorld = (Math.max(0.75, base) / Math.max(0.001, transform.k)) * 1.35
 
-  // Draw villages
+  const t = simClockSeconds.value || 0
+  const pulse = simRunning.value ? (Math.sin(t * 3.5) * 0.5 + 0.5) : 0
+
+  // points
   for (const v of villages.value) {
-    const p = worldToScreen(v.x, v.y)
-    const active = selectedVillageIds.has(v.id)
-    const alpha = active ? 0.9 : (dimInactive.value ? inactiveAlpha.value : 0.9)
+    const active = selectedVillageIds.has(String(v.id))
+    const alpha = active ? 0.95 : dimInactive.value ? inactiveAlpha.value : 0.9
+    const rad = active ? radiusWorld * (1.0 + 0.35 * pulse) : radiusWorld
 
     ctx.globalAlpha = alpha
     ctx.beginPath()
-    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2)
+    ctx.arc(v.x, v.y, rad, 0, Math.PI * 2)
     ctx.fillStyle = active ? '#ffd54f' : '#ffffff'
     ctx.fill()
   }
 
-  // Highlight selection outlines
+  // animated routes + traders
+  if (routes.value.length) {
+    const dashOffset = simRunning.value ? -(t * 18) : 0
+
+    ctx.save()
+    ctx.globalAlpha = 0.55
+    ctx.strokeStyle = '#00e5ff'
+    ctx.lineWidth = 1.25 / Math.max(0.001, transform.k)
+    ctx.setLineDash([6 / Math.max(0.001, transform.k), 6 / Math.max(0.001, transform.k)])
+    ctx.lineDashOffset = dashOffset / Math.max(0.001, transform.k)
+
+    for (const rt of routes.value) {
+      const a = byId.value.get(String(rt.aId))
+      const b = byId.value.get(String(rt.bId))
+      if (!a || !b) continue
+      ctx.beginPath()
+      ctx.moveTo(a.x, a.y)
+      ctx.lineTo(b.x, b.y)
+      ctx.stroke()
+    }
+    ctx.restore()
+
+    const speedK = 0.18
+    ctx.save()
+    for (let i = 0; i < routes.value.length; i++) {
+      const rt = routes.value[i]
+      const a = byId.value.get(String(rt.aId))
+      const b = byId.value.get(String(rt.bId))
+      if (!a || !b) continue
+
+      const u = ((t * speedK) + i * 0.17) % 1
+      const x = a.x + (b.x - a.x) * u
+      const y = a.y + (b.y - a.y) * u
+
+      ctx.globalAlpha = 0.95
+      ctx.fillStyle = '#ff00ff'
+      ctx.beginPath()
+      ctx.arc(x, y, Math.max(radiusWorld * 0.9, 2 / Math.max(0.001, transform.k)), 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+  }
+
+  // selection outline
   if (selectedVillageIds.size) {
     ctx.save()
     ctx.globalAlpha = 0.9
     ctx.strokeStyle = '#ff00ff'
-    ctx.lineWidth = 1.5
+    ctx.lineWidth = 1.5 / Math.max(0.001, transform.k)
     for (const id of selectedVillageIds) {
-      const v = byId.value.get(id)
+      const v = byId.value.get(String(id))
       if (!v) continue
-      const p = worldToScreen(v.x, v.y)
       ctx.beginPath()
-      ctx.arc(p.x, p.y, radius + 2.5, 0, Math.PI * 2)
+      ctx.arc(v.x, v.y, radiusWorld + (2.5 / Math.max(0.001, transform.k)), 0, Math.PI * 2)
       ctx.stroke()
     }
     ctx.restore()
   }
 }
 
-/* Hover picking (simple nearest) */
+/* Hover picking */
 function findNearestVillage(worldPt, maxDistWorld = 2.5) {
   let best = null
   let bestD2 = maxDistWorld * maxDistWorld
@@ -911,7 +935,6 @@ function onPointerMove(evt) {
   cursor.x = w.x
   cursor.y = w.y
 
-  // hover tooltip
   const v = findNearestVillage(w, 3 / Math.max(0.6, transform.k))
   if (v) {
     hoverTip.show = true
@@ -928,18 +951,14 @@ function onPointerLeave() {
   hoverTip.v = null
 }
 
-/* Load villages (supports multiple players/alliances) */
+/* Load villages helpers */
 function normalizeVillageRow(row, fallbackId) {
   const x = Number(row.x ?? row.village_x ?? row.coord_x ?? row.cx)
   const y = Number(row.y ?? row.village_y ?? row.coord_y ?? row.cy)
   const name = row.village_name ?? row.name ?? row.village ?? row.title ?? 'Village'
   const player = row.player_name ?? row.player ?? row.owner ?? ''
   const alliance = row.alliance_tag ?? row.alliance ?? row.tag ?? ''
-  const id =
-    row.village_id ??
-    row.id ??
-    row.vid ??
-    `${name}:${x}|${y}:${player}:${alliance}:${fallbackId}`
+  const id = row.village_id ?? row.id ?? row.vid ?? `${name}:${x}|${y}:${player}:${alliance}:${fallbackId}`
 
   return {
     id: String(id),
@@ -951,14 +970,58 @@ function normalizeVillageRow(row, fallbackId) {
   }
 }
 
+function toArrayPayload(data) {
+  if (Array.isArray(data)) return data
+  if (!data) return []
+  if (Array.isArray(data.villages)) return data.villages
+  if (Array.isArray(data.players)) return data.players
+  if (Array.isArray(data.alliances)) return data.alliances
+  if (Array.isArray(data.items)) return data.items
+  if (Array.isArray(data.data)) return data.data
+  if (Array.isArray(data.result)) return data.result
+  if (Array.isArray(data.rows)) return data.rows
+  return []
+}
+function pickFirstString(obj, keys) {
+  for (const k of keys) {
+    const v = obj?.[k]
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return ''
+}
+function pickFirstNumber(obj, keys) {
+  for (const k of keys) {
+    const v = obj?.[k]
+    const n = Number(v)
+    if (Number.isFinite(n)) return n
+  }
+  return 0
+}
+function uniqByValue(options) {
+  const seen = new Set()
+  const out = []
+  for (const o of options) {
+    const v = String(o?.value ?? '')
+    const lbl = String(o?.label ?? '')
+    if (!v || !lbl) continue
+    if (seen.has(v)) continue
+    seen.add(v)
+    out.push({ value: v, label: lbl })
+  }
+  return out
+}
+
 async function fetchAlliancesAndPlayersOnce() {
-  // alliances
   try {
-    const { data } = await api.get('/api/alliances')
-    const opts = (Array.isArray(data) ? data : []).map(a => ({
-      label: `${a.alliance_tag} (${Number(a.villages || 0).toLocaleString()} villages)`,
-      value: a.alliance_tag
-    }))
+    const resp = await api.get('/api/alliances')
+    const arr = toArrayPayload(resp.data)
+    const opts = uniqByValue(
+      arr.map((a) => {
+        const tag = pickFirstString(a, ['alliance_tag', 'tag', 'alliance', 'name'])
+        const villagesCount = pickFirstNumber(a, ['villages', 'village_count', 'villageCount', 'total_villages', 'totalVillages'])
+        return { value: tag, label: tag ? `${tag} (${villagesCount.toLocaleString()} villages)` : '' }
+      })
+    )
     allianceOptionsAll.value = opts
     allianceOptionsFiltered.value = opts
   } catch {
@@ -966,13 +1029,16 @@ async function fetchAlliancesAndPlayersOnce() {
     allianceOptionsFiltered.value = []
   }
 
-  // players
   try {
-    const { data } = await api.get('/api/players?limit=10000')
-    const opts = (Array.isArray(data) ? data : []).map(p => ({
-      label: `${p.player_name} (${Number(p.villages || 0).toLocaleString()} villages)`,
-      value: p.player_name
-    }))
+    const resp = await api.get('/api/players?limit=10000')
+    const arr = toArrayPayload(resp.data)
+    const opts = uniqByValue(
+      arr.map((p) => {
+        const name = pickFirstString(p, ['player_name', 'name', 'player', 'username'])
+        const villagesCount = pickFirstNumber(p, ['villages', 'village_count', 'villageCount', 'total_villages', 'totalVillages'])
+        return { value: name, label: name ? `${name} (${villagesCount.toLocaleString()} villages)` : '' }
+      })
+    )
     playerOptionsAll.value = opts
     playerOptionsFiltered.value = opts
   } catch {
@@ -989,62 +1055,58 @@ async function loadVillages() {
   try {
     let rows = []
 
-    // Prefer a dedicated world endpoint if you add it (recommended):
-    // GET /api/villages/latest?limit=...
     if (scopeMode.value === 'world') {
       try {
         const { data } = await api.get(`/api/villages/latest?limit=${encodeURIComponent(maxVillages.value)}&no_cache=1`)
-        rows = Array.isArray(data) ? data : (data?.villages || [])
-      } catch (e) {
+        rows = toArrayPayload(data)
+      } catch {
         backendSupportsWorld.value = false
-        throw new Error('World mode requires /api/villages/latest (see backend patch below) or use player/alliance/region mode.')
+        throw new Error('World mode requires /api/villages/latest or use player/alliance/region mode.')
       }
     }
 
-    // Alliances: use your existing per-scope route
     if (scopeMode.value === 'alliances') {
-      const tags = (selectedAlliances.value || []).filter(Boolean)
+      const tags = (selectedAlliances.value || []).filter((t) => typeof t === 'string' && t.trim())
       if (!tags.length) throw new Error('Select at least one alliance.')
-      const results = await Promise.all(tags.map(tag =>
-        api.get(`/api/alliance/${encodeURIComponent(tag)}/villages?limit=${encodeURIComponent(maxVillages.value)}`)
-          .then(r => r.data)
-      ))
+      const results = await Promise.all(
+        tags.map(async (tag) => {
+          const { data } = await api.get(`/api/alliance/${encodeURIComponent(tag)}/villages?limit=${encodeURIComponent(maxVillages.value)}`)
+          return toArrayPayload(data)
+        })
+      )
       rows = results.flat()
     }
 
-    // Players: use your existing per-scope route
     if (scopeMode.value === 'players') {
-      const names = (selectedPlayers.value || []).filter(Boolean)
+      const names = (selectedPlayers.value || []).filter((n) => typeof n === 'string' && n.trim())
       if (!names.length) throw new Error('Select at least one player.')
-      const results = await Promise.all(names.map(name =>
-        api.get(`/api/player/${encodeURIComponent(name)}/villages?limit=${encodeURIComponent(maxVillages.value)}`)
-          .then(r => r.data)
-      ))
+      const results = await Promise.all(
+        names.map(async (name) => {
+          const { data } = await api.get(`/api/player/${encodeURIComponent(name)}/villages?limit=${encodeURIComponent(maxVillages.value)}`)
+          return toArrayPayload(data)
+        })
+      )
       rows = results.flat()
     }
 
-    // Region: use your existing per-scope route
     if (scopeMode.value === 'region') {
       const rn = (regionName.value || '').trim()
       if (!rn) throw new Error('Enter a region name.')
       const { data } = await api.get(`/api/region/${encodeURIComponent(rn)}/villages?limit=${encodeURIComponent(maxVillages.value)}`)
-      rows = Array.isArray(data) ? data : []
+      rows = toArrayPayload(data)
     }
 
-    // Normalize + de-dup by id
     const normalized = rows.map((row, i) => normalizeVillageRow(row, i))
     const seen = new Set()
     const deduped = []
     for (const v of normalized) {
       if (seen.has(v.id)) continue
       seen.add(v.id)
-      // clamp to world bounds
       v.x = Math.max(MAP_MIN, Math.min(MAP_MAX, v.x))
       v.y = Math.max(MAP_MIN, Math.min(MAP_MAX, v.y))
       deduped.push(v)
     }
 
-    // If backend ignored limit, downsample (stable)
     let final = deduped
     if (final.length > maxVillages.value) {
       const step = Math.ceil(final.length / maxVillages.value)
@@ -1053,20 +1115,22 @@ async function loadVillages() {
 
     villages.value = final
     loaded.value = true
+
     selectedVillageIds.clear()
     hoverTip.show = false
     hoverTip.v = null
 
     await nextTick()
     fitToVillages()
-    renderAll()
+    scheduleRender()
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error(err)
     loadError.value = String(err?.message || err || 'Unknown error')
     villages.value = []
     loaded.value = false
     selectedVillageIds.clear()
-    renderAll()
+    scheduleRender()
   } finally {
     loading.value = false
   }
@@ -1077,30 +1141,46 @@ function clearAll() {
   selectedVillageIds.clear()
   loaded.value = false
   loadError.value = ''
-  renderAll()
+  scheduleRender()
 }
 
-/* Simulation */
+/* Simulation (RAF) */
+let simRaf = 0
+let simLastTs = 0
+
 function startSim() {
   if (simRunning.value) return
+  if (clockMode.value !== 'live') return
+
   simRunning.value = true
-  const tick = () => {
-    simClockSeconds.value += Math.max(0, speed.value)
+  simLastTs = performance.now()
+
+  const loop = (ts) => {
+    if (!simRunning.value) return
+    const dt = Math.min(0.05, Math.max(0, (ts - simLastTs) / 1000))
+    simLastTs = ts
+    simClockSeconds.value += dt * Math.max(0, Number(speed.value) || 0)
+
+    // IMPORTANT: schedule only, don't spam cancel/reschedule
     scheduleRender()
+    simRaf = requestAnimationFrame(loop)
   }
-  simTimer = window.setInterval(tick, 1000)
+
+  simRaf = requestAnimationFrame(loop)
 }
+
 function stopSim() {
   simRunning.value = false
-  if (simTimer) window.clearInterval(simTimer)
-  simTimer = null
+  if (simRaf) cancelAnimationFrame(simRaf)
+  simRaf = 0
 }
+
 function formatClock(s) {
   const sec = Math.max(0, Number(s) || 0)
   const h = Math.floor(sec / 3600)
   const m = Math.floor((sec % 3600) / 60)
   const ss = Math.floor(sec % 60)
-  const pad = n => String(n).padStart(2, '0')
+  const pad = (n) => String(n).padStart(2, '0')
   return `${pad(h)}:${pad(m)}:${pad(ss)}`
 }
 
@@ -1119,9 +1199,8 @@ onMounted(async () => {
   lockPageScroll()
   await nextTick()
 
-  // Setup d3-zoom on wrapper (replicates your global map wheel/drag behavior)
   if (wrapEl.value) {
-    zoom = d3.zoom()
+    zoom = d3zoom()
       .scaleExtent([MIN_ZOOM, MAX_ZOOM])
       .on('zoom', (event) => {
         transform = event.transform
@@ -1130,7 +1209,7 @@ onMounted(async () => {
         scheduleRender()
       })
 
-    d3.select(wrapEl.value).call(zoom).on('dblclick.zoom', null)
+    select(wrapEl.value).call(zoom).on('dblclick.zoom', null)
   }
 
   resizeCanvases()
@@ -1139,9 +1218,8 @@ onMounted(async () => {
 
   await fetchAlliancesAndPlayersOnce()
 
-  // Start centered (like your requirement for the global map)
   resetView()
-  renderAll()
+  scheduleRender()
 })
 
 onBeforeUnmount(() => {
@@ -1154,6 +1232,7 @@ onBeforeUnmount(() => {
 
 watch([showGrid, showAxes, pointSize, inactiveAlpha, dimInactive], () => scheduleRender())
 watch([showLabels, showRings], () => scheduleRender())
+watch(villages, () => scheduleRender(), { deep: false })
 </script>
 
 <style scoped>
@@ -1203,6 +1282,10 @@ watch([showLabels, showRings], () => scheduleRender())
   overflow: auto;
 }
 
+.side__panel {
+  min-height: 0;
+}
+
 .panel-card {
   background: rgba(255, 255, 255, 0.03);
   border-color: rgba(255, 255, 255, 0.08);
@@ -1215,8 +1298,21 @@ watch([showLabels, showRings], () => scheduleRender())
   padding: 10px 12px;
 }
 
+.panel-card--flex {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-card__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .vlist {
-  max-height: 320px;
+  flex: 1;
+  min-height: 180px;
   overflow: auto;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -1336,7 +1432,6 @@ watch([showLabels, showRings], () => scheduleRender())
 .canvas-wrap {
   position: absolute;
   inset: 0;
-  padding-top: 0;
   overflow: hidden;
 }
 
@@ -1377,7 +1472,7 @@ watch([showLabels, showRings], () => scheduleRender())
   color: #fff;
   padding: 8px 10px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
   min-width: 160px;
 }
