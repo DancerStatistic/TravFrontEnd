@@ -67,7 +67,6 @@
         <q-card flat bordered class="main-card">
           <q-card-section>
             <div class="row items-center q-gutter-md q-mb-md">
-              <!-- AUTOCOMPLETE (replaces free-text q-input) -->
               <div class="col-12 col-md-6">
                 <q-select
                   v-model="selectedPlayer"
@@ -153,7 +152,7 @@
               separator="cell"
               :loading="loading"
               :pagination="pagination"
-              @update:pagination="val => { pagination = val }"
+              @update:pagination="(val) => { pagination = val }"
               :rows-per-page-options="[20, 50, 100]"
               :sort-by="['population']"
               :sort-desc="[true]"
@@ -162,16 +161,14 @@
               <template #body-cell-name="props">
                 <q-td :props="props">
                   <router-link
-  v-if="props.row?.name"
-  :to="{ name: 'player-detail', params: { name: props.row.name } }"
-  class="player-link"
->
-  <q-icon name="person" size="16px" class="q-mr-xs" />
-  {{ props.row.name }}
-</router-link>
-
-<span v-else class="text-grey-6">Unknown</span>
-
+                    v-if="props.row?.name"
+                    :to="{ name: 'player-detail', params: { name: props.row.name } }"
+                    class="player-link"
+                  >
+                    <q-icon name="person" size="16px" class="q-mr-xs" />
+                    {{ props.row.name }}
+                  </router-link>
+                  <span v-else class="text-grey-6">Unknown</span>
                 </q-td>
               </template>
 
@@ -214,7 +211,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onActivated } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from 'boot/axios'
 
@@ -225,28 +222,21 @@ const router = useRouter()
  * ----------------------------- */
 const players = ref([])
 const loading = ref(false)
-
 const nameFilter = ref('')
 
-const pagination = ref({
+let pagination = ref({
   sortBy: 'population',
   descending: true,
   page: 1,
   rowsPerPage: 20
 })
 
-/**
- * Autocomplete state
- * - selectedPlayer: selected option object (or null)
- * - playerOptions: dropdown list
- * - optionsLoading: local filtering busy flag
- */
 const selectedPlayer = ref(null)
 const playerOptions = ref([])
 const optionsLoading = ref(false)
 
 /* -----------------------------
- * Table columns
+ * Columns
  * ----------------------------- */
 const columns = [
   { name: 'name', label: 'Player', field: 'name', sortable: true },
@@ -256,25 +246,116 @@ const columns = [
 ]
 
 /* -----------------------------
+ * Player→Alliance enrichment cache
+ * ----------------------------- */
+const TODAY = new Date().toISOString().slice(0, 10)
+const PLAYER_ALLIANCE_CACHE_KEY = `playerAllianceByName:${TODAY}`
+const PLAYER_ALLIANCE_CACHE_TTL = 1000 * 60 * 60 // 60 minutes
+
+function loadPlayerAllianceMapFromCache () {
+  try {
+    const raw = localStorage.getItem(PLAYER_ALLIANCE_CACHE_KEY)
+    if (!raw) return null
+    const { ts, data } = JSON.parse(raw)
+    if (!ts || !data || typeof data !== 'object') return null
+    if ((Date.now() - ts) > PLAYER_ALLIANCE_CACHE_TTL) return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+function savePlayerAllianceMapToCache (map) {
+  try {
+    localStorage.setItem(PLAYER_ALLIANCE_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: map }))
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * IMPORTANT FIX:
+ * /api/villages (alias of /api/marker_rows) returns injected fields:
+ *   - player in player_name / player
+ *   - alliance in "alliance" (NOT alliance_tag)
+ * so we must read v.alliance as well.
+ */
+function readVillagePlayerName (v) {
+  return (
+    v?.player_name ??
+    v?.playerName ??
+    v?.player ??
+    v?.owner ??
+    v?.player_name_param ??
+    ''
+  ).toString().trim()
+}
+
+function readVillageAllianceTag (v) {
+  const raw =
+    (v?.alliance ??            // <-- injected by backend
+     v?.alliance_tag ??
+     v?.allianceTag ??
+     v?.ally_tag ??
+     v?.allyTag ??
+     v?.ally ??
+     '') ?? ''
+  const tag = String(raw).trim()
+  // normalize empties to Natars (consistent with other pages)
+  return tag || 'Natars'
+}
+
+async function buildPlayerAllianceMap () {
+  const cached = loadPlayerAllianceMapFromCache()
+  if (cached) return cached
+
+  const map = {}
+
+  // Try the same endpoint(s) your logs show are responding 200
+  const tryFetch = async (url) => {
+    const { data } = await api.get(url)
+    return data
+  }
+
+  let villages = []
+  try {
+    const data = await tryFetch('/api/villages?limit=20000')
+    villages = Array.isArray(data) ? data : (Array.isArray(data?.villages) ? data.villages : [])
+  } catch {
+    try {
+      const data = await tryFetch('/api/villages')
+      villages = Array.isArray(data) ? data : (Array.isArray(data?.villages) ? data.villages : [])
+    } catch {
+      villages = []
+    }
+  }
+
+  for (const v of villages) {
+    const player = readVillagePlayerName(v)
+    if (!player) continue
+
+    const tag = readVillageAllianceTag(v)
+    if (!map[player]) map[player] = tag
+  }
+
+  savePlayerAllianceMapToCache(map)
+  return map
+}
+
+/* -----------------------------
  * Navigation
  * ----------------------------- */
-function goToSelectedPlayer() {
+function goToSelectedPlayer () {
   if (!selectedPlayer.value?.value) return
   router.push({ name: 'player-detail', params: { name: selectedPlayer.value.value } })
 }
 
-function onSelectedPlayer(val) {
-  // Optional: navigate immediately on select
-  // If you'd rather require button click only, comment out the next 2 lines.
+function onSelectedPlayer (val) {
   if (!val?.value) return
   router.push({ name: 'player-detail', params: { name: val.value } })
 }
 
-/**
- * QSelect filter: lets user type, but selection must come from options.
- * (No free-typed name submission.)
- */
-function filterPlayers(needle, update) {
+function filterPlayers (needle, update) {
   update(() => {
     optionsLoading.value = true
     const n = (needle || '').trim().toLowerCase()
@@ -288,8 +369,6 @@ function filterPlayers(needle, update) {
     }))
 
     if (n) list = list.filter(o => (o.label || '').toLowerCase().includes(n))
-
-    // Keep results useful
     list.sort((a, b) => Number(b.population || 0) - Number(a.population || 0))
 
     playerOptions.value = list.slice(0, 40)
@@ -305,52 +384,53 @@ const filteredPlayers = computed(() => {
   return (players.value || []).filter(p => !f || (p.name || '').toLowerCase().includes(f))
 })
 
-const totalVillages = computed(() => {
-  return filteredPlayers.value.reduce((sum, p) => sum + Number(p.villages || 0), 0)
-})
-
-const totalPopulation = computed(() => {
-  return filteredPlayers.value.reduce((sum, p) => sum + Number(p.population || 0), 0)
-})
-
-const avgPopulation = computed(() => {
-  if (filteredPlayers.value.length === 0) return 0
-  return Math.round(totalPopulation.value / filteredPlayers.value.length)
-})
+const totalVillages = computed(() => filteredPlayers.value.reduce((sum, p) => sum + Number(p.villages || 0), 0))
+const totalPopulation = computed(() => filteredPlayers.value.reduce((sum, p) => sum + Number(p.population || 0), 0))
+const avgPopulation = computed(() => filteredPlayers.value.length ? Math.round(totalPopulation.value / filteredPlayers.value.length) : 0)
 
 /* -----------------------------
  * Load data
  * ----------------------------- */
- async function loadPlayers() {
+async function loadPlayers () {
   loading.value = true
   try {
-    const { data } = await api.get('/api/players?limit=1000')
+    const { data } = await api.get('/api/players?limit=10000')
+    const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
 
-    const rows = Array.isArray(data) ? data : []
+    // Build enrichment map (always; it is fast enough and guarantees alliance population)
+    const allianceMap = await buildPlayerAllianceMap()
 
     players.value = rows
       .map((p) => {
         const name =
           (p?.name ?? p?.player_name ?? p?.playerName ?? p?.player)?.toString().trim() || ''
 
-        const alliance =
+        // try direct fields from /api/players
+        let alliance =
           (p?.alliance ?? p?.alliance_tag ?? p?.allianceTag)?.toString().trim() || ''
+
+        // fallback to villages-derived map (keyed by player name)
+        if (!alliance && name) alliance = String(allianceMap?.[name] || '').trim()
+
+        // normalize empty to Natars for consistent UI
+        if (!alliance) alliance = 'Natars'
 
         return {
           ...p,
-          name,          // REQUIRED by router + row-key
-          alliance,      // matches your columns.field
+          name,
+          alliance,
           villages: Number(p?.villages ?? 0),
           population: Number(p?.population ?? 0)
         }
       })
-      // Drop any bad rows that would crash routing
-      .filter((p) => p.name.length > 0)
+      .filter(p => p.name.length > 0)
+  } catch (err) {
+    console.error('Failed to load players:', err)
+    players.value = []
   } finally {
     loading.value = false
   }
 }
-
 
 onMounted(loadPlayers)
 onActivated(loadPlayers)
