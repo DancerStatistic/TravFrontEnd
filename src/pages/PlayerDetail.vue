@@ -159,151 +159,151 @@
                   </q-btn>
                 </div>
 
-            <div
-              class="map-area"
-              ref="mapAreaEl"
-              @contextmenu.capture="onContextMenu"
-              style="min-height: 500px;"
-            >
-              <svg
-                class="map-svg"
-                ref="svg"
-                viewBox="-200 -200 400 400"
-                preserveAspectRatio="xMidYMid meet"
-                @mouseleave="hideTooltip"
-                @pointerdown="onPointerDown"
-                @pointermove="onPointerMove"
-                @pointerup="onPointerUp"
-              >
-                <defs>
-                  <pattern id="grid1" width="1" height="1" patternUnits="userSpaceOnUse">
-                    <path d="M1 0 L0 0 0 1" fill="none" stroke="#343434" stroke-width="0.05" />
-                  </pattern>
-                  <pattern id="grid10" width="10" height="10" patternUnits="userSpaceOnUse">
-                    <rect width="10" height="10" fill="url(#grid1)" />
-                    <path d="M10 0 L0 0 0 10" fill="none" stroke="#585858" stroke-width="0.15" />
-                  </pattern>
-                </defs>
+                <div
+                  class="map-area"
+                  ref="mapAreaEl"
+                  @contextmenu.capture="onContextMenu"
+                  style="min-height: 500px;"
+                >
+                  <svg
+                    class="map-svg"
+                    ref="svg"
+                    viewBox="-200 -200 400 400"
+                    preserveAspectRatio="xMidYMid meet"
+                    @mouseleave="hideTooltip"
+                    @pointerdown="onPointerDown"
+                    @pointermove="onPointerMove"
+                    @pointerup="onPointerUp"
+                  >
+                    <defs>
+                      <pattern id="grid1" width="1" height="1" patternUnits="userSpaceOnUse">
+                        <path d="M1 0 L0 0 0 1" fill="none" stroke="#343434" stroke-width="0.05" />
+                      </pattern>
+                      <pattern id="grid10" width="10" height="10" patternUnits="userSpaceOnUse">
+                        <rect width="10" height="10" fill="url(#grid1)" />
+                        <path d="M10 0 L0 0 0 10" fill="none" stroke="#585858" stroke-width="0.15" />
+                      </pattern>
+                    </defs>
 
-                <g ref="viewportEl">
-                  <!-- background -->
-                  <image
-                    x="-200"
-                    y="-200"
-                    width="400"
-                    height="400"
-                    :href="bgUrl"
-                    :xlink:href="bgUrl"
-                    preserveAspectRatio="none"
-                    opacity="0.65"
-                  />
+                    <g ref="viewportEl">
+                      <!-- background -->
+                      <image
+                        x="-200"
+                        y="-200"
+                        width="400"
+                        height="400"
+                        :href="bgUrl"
+                        :xlink:href="bgUrl"
+                        preserveAspectRatio="none"
+                        opacity="0.65"
+                      />
 
-                  <!-- grid & axes -->
-                  <rect x="-200" y="-200" width="400" height="400" fill="url(#grid10)" />
-                  <line
-                    x1="-200"
-                    y1="0"
-                    x2="200"
-                    y2="0"
-                    stroke="#9e9e9e"
-                    stroke-width="1.2"
-                    vector-effect="non-scaling-stroke"
-                  />
-                  <line
-                    x1="0"
-                    y1="-200"
-                    x2="0"
-                    y2="200"
-                    stroke="#9e9e9e"
-                    stroke-width="1.2"
-                    vector-effect="non-scaling-stroke"
-                  />
-                  <rect
-                    x="-200"
-                    y="-200"
-                    width="400"
-                    height="400"
-                    fill="none"
-                    stroke="#00e5ff"
-                    stroke-width="1.2"
-                    opacity="0.25"
-                    vector-effect="non-scaling-stroke"
-                  />
+                      <!-- grid & axes -->
+                      <rect x="-200" y="-200" width="400" height="400" fill="url(#grid10)" />
+                      <line
+                        x1="-200"
+                        y1="0"
+                        x2="200"
+                        y2="0"
+                        stroke="#9e9e9e"
+                        stroke-width="1.2"
+                        vector-effect="non-scaling-stroke"
+                      />
+                      <line
+                        x1="0"
+                        y1="-200"
+                        x2="0"
+                        y2="200"
+                        stroke="#9e9e9e"
+                        stroke-width="1.2"
+                        vector-effect="non-scaling-stroke"
+                      />
+                      <rect
+                        x="-200"
+                        y="-200"
+                        width="400"
+                        height="400"
+                        fill="none"
+                        stroke="#00e5ff"
+                        stroke-width="1.2"
+                        opacity="0.25"
+                        vector-effect="non-scaling-stroke"
+                      />
 
-                  <!-- markers -->
-                  <g ref="markersGroup" id="markersLayer"></g>
+                      <!-- markers -->
+                      <g ref="markersGroup" id="markersLayer"></g>
 
-                  <!-- hover highlight -->
-                  <g id="overlayLayer">
-                    <circle
-                      v-if="selection"
-                      :cx="selection.x"
-                      :cy="selection.y"
-                      :r="2.4"
-                      fill="none"
-                      stroke="#00e5ff"
-                      stroke-width="0.8"
-                      vector-effect="non-scaling-stroke"
-                    />
-                    <circle
-                      v-if="selection"
-                      :cx="selection.x"
-                      :cy="selection.y"
-                      :r="0.9"
-                      fill="#00e5ff"
-                      opacity="0.85"
-                    />
-                  </g>
+                      <!-- hover highlight -->
+                      <g id="overlayLayer">
+                        <circle
+                          v-if="selection"
+                          :cx="selection.x"
+                          :cy="selection.y"
+                          :r="2.4"
+                          fill="none"
+                          stroke="#00e5ff"
+                          stroke-width="0.8"
+                          vector-effect="non-scaling-stroke"
+                        />
+                        <circle
+                          v-if="selection"
+                          :cx="selection.x"
+                          :cy="selection.y"
+                          :r="0.9"
+                          fill="#00e5ff"
+                          opacity="0.85"
+                        />
+                      </g>
 
-                  <circle cx="0" cy="0" r="0.9" fill="#ff5252" opacity="0.9" />
-                </g>
+                      <circle cx="0" cy="0" r="0.9" fill="#ff5252" opacity="0.9" />
+                    </g>
 
-                <!-- screen-fixed coord labels -->
-                <g>
-                  <text
-                    ref="labelLeft"
-                    text-anchor="end"
-                    alignment-baseline="middle"
-                    class="coord-label"
+                    <!-- screen-fixed coord labels -->
+                    <g>
+                      <text
+                        ref="labelLeft"
+                        text-anchor="end"
+                        alignment-baseline="middle"
+                        class="coord-label"
+                      />
+                      <text
+                        ref="labelRight"
+                        text-anchor="start"
+                        alignment-baseline="middle"
+                        class="coord-label"
+                      />
+                      <text
+                        ref="labelTop"
+                        text-anchor="middle"
+                        alignment-baseline="hanging"
+                        class="coord-label"
+                      />
+                      <text
+                        ref="labelBottom"
+                        text-anchor="middle"
+                        alignment-baseline="baseline"
+                        class="coord-label"
+                      />
+                    </g>
+                  </svg>
+
+                  <!-- Tooltip -->
+                  <div
+                    v-if="tooltip.show"
+                    class="tooltip"
+                    :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }"
+                    v-html="tooltip.content"
                   />
-                  <text
-                    ref="labelRight"
-                    text-anchor="start"
-                    alignment-baseline="middle"
-                    class="coord-label"
-                  />
-                  <text
-                    ref="labelTop"
-                    text-anchor="middle"
-                    alignment-baseline="hanging"
-                    class="coord-label"
-                  />
-                  <text
-                    ref="labelBottom"
-                    text-anchor="middle"
-                    alignment-baseline="baseline"
-                    class="coord-label"
-                  />
-                </g>
-              </svg>
+                </div>
 
-              <!-- Tooltip -->
-              <div
-                v-if="tooltip.show"
-                class="tooltip"
-                :style="{ top: tooltip.y + 'px', left: tooltip.x + 'px' }"
-                v-html="tooltip.content"
-              />
-            </div>
-
-            <div class="statusbar row items-center q-px-sm q-py-xs">
-              <div class="col text-caption">
-                Cursor: X {{ cursor.x.toFixed(0) }} / Y {{ cursor.y.toFixed(0) }}
-              </div>
-              <div class="col text-caption text-right">
-                Zoom: {{ zoomK.toFixed(2) }}×
-              </div>
-            </div>
+                <div class="statusbar row items-center q-px-sm q-py-xs">
+                  <div class="col text-caption">
+                    Cursor: X {{ cursor.x.toFixed(0) }} / Y {{ cursor.y.toFixed(0) }}
+                  </div>
+                  <div class="col text-caption text-right">
+                    Zoom: {{ zoomK.toFixed(2) }}×
+                  </div>
+                </div>
 
                 <!-- Enhanced Context Menu -->
                 <q-menu
@@ -352,9 +352,9 @@
 
               <!-- Charts Tab -->
               <q-tab-panel name="charts" class="q-pa-md charts-tab-panel">
-                <PlayerHistoryCharts 
+                <PlayerHistoryCharts
                   v-if="playerHistory.length > 0"
-                  :player-name="playerName" 
+                  :player-name="playerName"
                   :history-data="playerHistory"
                 />
                 <div v-else class="text-center q-pa-lg text-grey-6">
@@ -420,12 +420,14 @@
             <template #body-cell-alliance="props">
               <q-td :props="props">
                 <RouterLink
-                  v-if="props.row.alliance"
+                  v-if="props.row.alliance && props.row.alliance !== NO_ALLIANCE_LABEL"
                   :to="{ name: 'alliance-detail', params: { tag: props.row.alliance } }"
                 >
                   {{ props.row.alliance }}
                 </RouterLink>
-                <span v-else class="text-grey-6">—</span>
+                <span v-else class="text-grey-6">
+                  {{ props.row.alliance || '—' }}
+                </span>
               </q-td>
             </template>
 
@@ -445,7 +447,6 @@
   </q-page>
 </template>
 
-
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
 import { useQuasar, Notify } from 'quasar'
@@ -454,6 +455,21 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import * as d3 from 'd3'
 import { api } from 'boot/axios'
 import bgUrl from 'assets/background.png'
+
+/* =========================
+ * Alliance separation
+ * ========================= */
+const NO_ALLIANCE_LABEL = 'No Alliance'
+
+function normalizeAllianceTag(rawTag, mappedTribeName) {
+  const tag = String(rawTag ?? '').trim()
+  if (tag) return tag
+
+  // Only treat missing alliance as "Natars" if the tribe is actually Natars.
+  if (String(mappedTribeName || '').toLowerCase() === 'natars') return 'Natars'
+
+  return NO_ALLIANCE_LABEL
+}
 
 /* routing */
 const $q = useQuasar()
@@ -471,49 +487,31 @@ function goBack () {
   else router.push('/')
 }
 
-/* 
+/*
  * Tribe mapping with case-insensitive matching
- * To debug, add this to browser console:
- *   window.debugTribe = function(t) {
- *     const s = String(t).trim().toLowerCase();
- *     return {
- *       input: t,
- *       type: typeof t,
- *       normalized: s,
- *       mapped: TRIBE_MAP[s] || 'No direct match',
- *       allTribes: TRIBE_MAP
- *     };
- *   }
  */
 const TRIBE_MAP = {
-  // Number to name mapping
   1: 'Romans', 2: 'Teutons', 3: 'Gauls', 4: 'Nature',
   5: 'Natars', 6: 'Egyptians', 7: 'Huns', 8: 'Spartans', 9: 'Vikings',
-  // Case-insensitive string matching
   'romans': 'Romans', 'teutons': 'Teutons', 'gauls': 'Gauls', 'nature': 'Nature',
-  'natars': 'Natars', 'egyptians': 'Egyptians', 'huns': 'Huns', 
+  'natars': 'Natars', 'egyptians': 'Egyptians', 'huns': 'Huns',
   'spartans': 'Spartans', 'vikings': 'Vikings'
 }
 
 function mapTribe(t) {
   if (t == null || t === '') return 'Unknown'
-  
-  // Try to match by number
+
   const n = Number(t)
   if (!isNaN(n) && TRIBE_MAP[n]) return TRIBE_MAP[n]
-  
-  // Try to match by string (case-insensitive)
+
   const s = String(t).trim().toLowerCase()
   if (s in TRIBE_MAP) return TRIBE_MAP[s]
-  
-  // Try direct match with any case
-  const directMatch = Object.entries(TRIBE_MAP).find(([_, value]) => 
+
+  const directMatch = Object.entries(TRIBE_MAP).find(([_, value]) =>
     String(value).toLowerCase() === s
   )
-  
   if (directMatch) return directMatch[1]
-  
-  // Fallback: capitalize first letter
+
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Unknown'
 }
 
@@ -523,24 +521,19 @@ const filter     = ref('')
 const pagination = ref({ page:1, rowsPerPage:10 })
 const activeTab  = ref('map')
 
-// Compute tribe distribution for the village distribution chart
 const tribeDistribution = computed(() => {
-  const tribes = {};
-  
+  const tribes = {}
   villages.value.forEach(village => {
-    const tribeName = village.tribe || 'Unknown';
-    if (!tribes[tribeName]) {
-      tribes[tribeName] = 0;
-    }
-    tribes[tribeName]++;
-  });
+    const tribeName = village.tribe || 'Unknown'
+    if (!tribes[tribeName]) tribes[tribeName] = 0
+    tribes[tribeName]++
+  })
 
   return Object.entries(tribes)
     .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
-});
+    .sort((a, b) => b.count - a.count)
+})
 
-// Get color for each tribe
 function getTribeColor(tribeName, isLight = false) {
   const colors = {
     'Roman': 'blue',
@@ -552,11 +545,12 @@ function getTribeColor(tribeName, isLight = false) {
     'Hun': 'brown',
     'Spartan': 'red-10',
     'Unknown': 'grey-6'
-  };
+  }
 
-  const baseColor = colors[tribeName] || 'grey-5';
-  return isLight ? `${baseColor}-2` : baseColor;
+  const baseColor = colors[tribeName] || 'grey-5'
+  return isLight ? `${baseColor}-2` : baseColor
 }
+
 const columns = [
   { name:'village',       label:'Village',      field:'village',       align:'left',  sortable:true },
   { name:'coords',        label:'Coords',       field:'coords',        align:'left',  sortable:true },
@@ -566,6 +560,7 @@ const columns = [
   { name:'region',        label:'Region',       field:'region',        align:'left',  sortable:true },
   { name:'tribe',         label:'Tribe',        field:'tribe',         align:'left',  sortable:true }
 ]
+
 const villagesFiltered = computed(() => {
   const q = filter.value.trim().toLowerCase()
   if (!q) return villages.value
@@ -587,13 +582,12 @@ const kpis = computed(() => {
   const vp         = v.reduce((s, r) => s + (r.victoryPoints || 0), 0)
   return { villages: villagesCount, population, vp }
 })
+
 const profileLink = computed(() =>
   playerId.value ? `https://nys.x1.europe.travian.com/profile/${playerId.value}` : '#'
 )
 
-
 function safeNotify(opts) {
-  // Works whether Notify plugin is enabled or not
   if ($q && typeof $q.notify === 'function') {
     $q.notify(opts)
     return
@@ -602,20 +596,16 @@ function safeNotify(opts) {
 }
 
 const notifyError = (message) => {
-  // Prefer Quasar Notify plugin API
   if (Notify?.create) {
     Notify.create({ type: 'negative', message })
     return
   }
-  // Fallback if Notify plugin isn't available
   if ($q?.notify) {
     $q.notify({ type: 'negative', message })
     return
   }
   console.warn('Notify unavailable:', message)
 }
-
-
 
 /* helpers */
 function makeMapLink(coords) {
@@ -652,7 +642,7 @@ const labelBottom = ref(null)
 /* world & zoom */
 const WORLD = { x0:-200, y0:-200, x1:200, y1:200 }
 let zoom
-let suppressSnap = false // guard to avoid endless end->snap->transform loops
+let suppressSnap = false
 
 function getContainerRect () {
   const el = mapAreaEl.value || svg.value
@@ -714,11 +704,11 @@ function snapBack() {
 function centerAt(x, y, k = d3.zoomTransform(svg.value).k || 1) {
   const rect = getContainerRect()
   if (!rect || !Number.isFinite(x) || !Number.isFinite(y)) return
-  
-  k = Math.max(0.1, Math.min(k, 50)) // Ensure k is within reasonable bounds
+
+  k = Math.max(0.1, Math.min(k, 50))
   const tx = rect.width / 2 - k * x
   const ty = rect.height / 2 - k * y
-  
+
   suppressSnap = true
   d3.select(svg.value)
     .transition()
@@ -727,8 +717,8 @@ function centerAt(x, y, k = d3.zoomTransform(svg.value).k || 1) {
       zoom.transform,
       d3.zoomIdentity.translate(tx, ty).scale(k)
     )
-    .on('end', () => { 
-      suppressSnap = false 
+    .on('end', () => {
+      suppressSnap = false
       updateLabels()
     })
 }
@@ -739,7 +729,7 @@ function villagesBBox() {
   let minx=Infinity, miny=Infinity, maxx=-Infinity, maxy=-Infinity
   for (const r of villages.value) {
     const x = +r.x
-    const y = -(+r.y) // svg coords
+    const y = -(+r.y)
     if (x   < minx) minx = x
     if (y   < miny) miny = y
     if (x+1 > maxx) maxx = x+1
@@ -750,36 +740,33 @@ function villagesBBox() {
 function fitToContent() {
   const rect = getContainerRect()
   if (!rect || !villages.value.length) return
-  
+
   const bbox = villagesBBox()
-  const pad = 1.2 // Slightly more padding
+  const pad = 1.2
   const k = Math.min(
     rect.width / (bbox.width * pad),
     rect.height / (bbox.height * pad)
   )
-  
+
   const cx = bbox.x + bbox.width / 2
   const cy = bbox.y + bbox.height / 2
-  const kClamped = Math.max(0.5, Math.min(k, 10)) // Limit max zoom
-  
+  const kClamped = Math.max(0.5, Math.min(k, 10))
+
   centerAt(cx, cy, kClamped)
 }
 function resetView() {
   const rect = getContainerRect()
   if (!rect) return
-  
-  // Calculate the scale to fit the world view
+
   const worldWidth = WORLD.x1 - WORLD.x0
   const worldHeight = WORLD.y1 - WORLD.y0
-  const scaleX = rect.width / (worldWidth * 1.1)  // 10% padding
-  const scaleY = rect.height / (worldHeight * 1.1) // 10% padding
-  const scale = Math.min(scaleX, scaleY, 1) // Don't zoom in beyond 1:1
-  
-  // Center the view
+  const scaleX = rect.width / (worldWidth * 1.1)
+  const scaleY = rect.height / (worldHeight * 1.1)
+  const scale = Math.min(scaleX, scaleY, 1)
+
   const tx = (rect.width - worldWidth * scale) / 2 - WORLD.x0 * scale
   const ty = (rect.height - worldHeight * scale) / 2 - WORLD.y0 * scale
-  
-  // Apply the transform
+
   suppressSnap = true
   d3.select(svg.value)
     .transition()
@@ -805,7 +792,7 @@ function onPointerMove (evt) { throttledCursor(evt) }
 function onPointerUp   (evt) { throttledCursor(evt) }
 function throttledCursor(evt) {
   const now = performance.now()
-  if (now - cursorTick < 60) return // ~16fps for statusbar
+  if (now - cursorTick < 60) return
   cursorTick = now
   const p = toMapCoords(evt)
   cursor.value = p
@@ -816,17 +803,15 @@ function onContextMenu(e) {
   e.preventDefault()
   const el = e.target.closest('.marker')
   ctx.hasMarker = !!el
-  
-  // Remove previous highlight if any
+
   d3.select(svg.value).selectAll('.marker.highlighted')
     .classed('highlighted', false)
     .attr('width', 1)
     .attr('height', 1)
     .attr('x', d => d.x - 0.5)
     .attr('y', d => d.y - 0.5)
-  
+
   if (el) {
-    // Highlight the selected village
     const marker = d3.select(el)
     marker
       .classed('highlighted', true)
@@ -834,19 +819,18 @@ function onContextMenu(e) {
       .attr('height', 2)
       .attr('x', d => d.x - 1)
       .attr('y', d => d.y - 1)
-      
+
     const bb = el.getBBox()
     ctx.point = { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 }
   } else {
     ctx.point = toMapCoords(e)
   }
-  
-  // Prevent any zoom behavior
+
   if (e.type === 'dblclick') {
     e.stopPropagation()
     return false
   }
-  
+
   contextPosition.value = { x: e.clientX, y: e.clientY }
   showContextMenu.value = true
   return false
@@ -893,26 +877,30 @@ function centerFromCoords (coords) {
 
 /* draw markers directly from villages */
 function allianceColor(tag) {
-  const s = (tag || 'Natars') + ''
+  const s = (tag || NO_ALLIANCE_LABEL) + ''
   let h = 0
   for (let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0
   return `hsl(${h % 360},70%,50%)`
 }
+
 function drawMarkers() {
   const root = d3.select(markersGroup.value)
   root.selectAll('*').remove()
   if (!villages.value.length) return
 
-  const data = villages.value.map(v => ({
-    x: +v.x,
-    y: -(+v.y),
-    alliance: v.alliance || 'Natars',
-    tribe: v.tribe || 'Unknown',
-    village: v.village,
-    player: v.player || playerName.value,
-    population: +v.population || 0,
-    fill: allianceColor(v.alliance)
-  }))
+  const data = villages.value.map(v => {
+    const a = v.alliance || NO_ALLIANCE_LABEL
+    return {
+      x: +v.x,
+      y: -(+v.y),
+      alliance: a,
+      tribe: v.tribe || 'Unknown',
+      village: v.village,
+      player: v.player || playerName.value,
+      population: +v.population || 0,
+      fill: allianceColor(a)
+    }
+  })
 
   root.selectAll('rect.marker')
     .data(data)
@@ -931,17 +919,16 @@ function drawMarkers() {
     .on('pointerover', (e, d) => {
       const coords = toMapCoords(e)
       const tip = `Village: ${d.village}<br>Player: ${d.player}<br>Population: ${d.population.toLocaleString()}<br>Alliance: ${d.alliance}<br>Tribe: ${d.tribe}`
-      
-      // Get the current transform to convert from SVG to screen coordinates
+
       const transform = d3.zoomTransform(svg.value)
       const screenX = transform.applyX(coords.x) + 10
       const screenY = transform.applyY(coords.y) + 10
-      
-      tooltip.value = { 
-        show: true, 
-        x: screenX, 
-        y: screenY, 
-        content: sanitizeTooltip(tip) 
+
+      tooltip.value = {
+        show: true,
+        x: screenX,
+        y: screenY,
+        content: sanitizeTooltip(tip)
       }
       ctx.hasMarker = true
     })
@@ -951,6 +938,7 @@ function drawMarkers() {
 /* data loading */
 const error = ref(null)
 const playerHistory = ref([])
+
 function resetState() {
   error.value = null
   villages.value = []
@@ -973,13 +961,11 @@ function debugHistoryData(history) {
 
   console.log(`Found ${history.length} days of data`)
 
-  // Log first and last entry
   console.log('First entry:', history[0])
   if (history.length > 1) {
     console.log('Last entry:', history[history.length - 1])
   }
 
-  // Check data structure
   const sample = history[0] || {}
   const hasDate = !!(sample.date ?? sample.dump_date ?? sample.dumpDate)
 
@@ -992,17 +978,14 @@ function debugHistoryData(history) {
     console.error('Missing required fields:', missingFields)
   }
 
-  // Check date range (supports both date and dump_date)
   const dates = history
     .map(h => (h.date ?? h.dump_date ?? h.dumpDate))
     .filter(Boolean)
     .sort()
 
   console.log('Date range:', dates[0], 'to', dates[dates.length - 1])
-
   console.groupEnd()
 }
-
 
 async function loadPlayerHistory () {
   try {
@@ -1019,12 +1002,8 @@ async function loadPlayerHistory () {
     const normalized = (Array.isArray(rawHistory) ? rawHistory : [])
       .map((r) => {
         const date = (r?.date ?? r?.dump_date ?? r?.dumpDate ?? '').toString()
-        return {
-          ...r,
-          date // <-- guarantees the field your frontend expects
-        }
+        return { ...r, date }
       })
-      // Optional safety: drop broken rows (prevents chart issues)
       .filter(r => (r.date || '').trim().length > 0)
 
     playerHistory.value = normalized
@@ -1040,67 +1019,62 @@ async function loadPlayerHistory () {
   }
 }
 
-
-
-
 async function loadAll() {
-  console.log('loadAll called for player:', playerName.value);
-  
-  // Validate player name before making any API calls
+  console.log('loadAll called for player:', playerName.value)
+
   if (!playerName.value) {
     error.value = 'No player name provided.'
-    console.error('No player name provided');
-    return false;
+    console.error('No player name provided')
+    return false
   }
-  
-  // Load player history
+
   await loadPlayerHistory()
 
   try {
     let playerTribe = null
-    
-    // Try to get player info to determine tribe
+
     try {
-      console.log('Fetching players list...');
-      const playersResponse = await api.get('/api/players');
-      console.log('Players list response:', playersResponse);
-      
-      const player = playersResponse.data?.find(p => p.name === playerName.value);
-      
+      console.log('Fetching players list...')
+      const playersResponse = await api.get('/api/players')
+      console.log('Players list response:', playersResponse)
+
+      const player = playersResponse.data?.find(p => p.name === playerName.value)
+
       if (player) {
-        console.log('Found player in players list:', player);
-        window.debugPlayer = player;
-        playerTribe = player.tribe_id || player.tribeId || player.tribe || null;
-        console.log('Player tribe:', playerTribe);
+        console.log('Found player in players list:', player)
+        window.debugPlayer = player
+        playerTribe = player.tribe_id || player.tribeId || player.tribe || null
+        console.log('Player tribe:', playerTribe)
       } else {
-        console.warn('Player not found in players list');
+        console.warn('Player not found in players list')
       }
     } catch (e) {
-      console.warn('Could not fetch players list:', e);
+      console.warn('Could not fetch players list:', e)
     }
-    
-    // Fetch villages for the player
+
     try {
-      console.log(`Fetching villages for player: ${playerName.value}`);
-      const response = await api.get(`/api/player/${encodeURIComponent(playerName.value)}/villages`);
-      console.log('Villages API response:', response);
-      
-      const villagesData = response.data?.villages || [];
-      console.log('Villages data:', villagesData);
-      
+      console.log(`Fetching villages for player: ${playerName.value}`)
+      const response = await api.get(`/api/player/${encodeURIComponent(playerName.value)}/villages`)
+      console.log('Villages API response:', response)
+
+      const villagesData = response.data?.villages || []
+      console.log('Villages data:', villagesData)
+
       if (!villagesData.length) {
-        console.warn('No villages data received or empty array');
-        error.value = 'No villages found for this player.';
-        return false;
+        console.warn('No villages data received or empty array')
+        error.value = 'No villages found for this player.'
+        return false
       }
-      
-      window.debugVillage = () => villagesData[0];
-      
-      // Process villages data
+
+      window.debugVillage = () => villagesData[0]
+
       villages.value = villagesData.map(r => {
-        console.log('Processing village:', r);
-        const villageTribe = r.tribe_id || r.tribeId || r.tribe || 'Unknown';
-        
+        console.log('Processing village:', r)
+        const villageTribe = r.tribe_id || r.tribeId || r.tribe || 'Unknown'
+        const mappedTribe = playerTribe ? mapTribe(playerTribe) : mapTribe(villageTribe)
+
+        const rawAlliance = r.alliance_tag || r.alliance || ''
+
         return {
           village:       r.village_name || r.name || 'Unnamed Village',
           coords:        `(${r.x},${r.y})`,
@@ -1108,35 +1082,35 @@ async function loadAll() {
           y:             Number(r.y) || 0,
           population:    Number(r.population || 0),
           victoryPoints: Number(r.victory_points || r.victoryPoints || 0),
-          alliance:      r.alliance_tag || r.alliance || '',
+
+          // IMPORTANT: separate no affiliation from Natars
+          alliance:      normalizeAllianceTag(rawAlliance, mappedTribe),
+
           region:        r.region || '',
-          tribe:         playerTribe ? mapTribe(playerTribe) : mapTribe(villageTribe),
+          tribe:         mappedTribe,
           player:        r.player_name || r.playerName || playerName.value,
           player_id:     r.player_id || r.playerId || null
-        };
-      });
-      
-      console.log('Processed villages:', villages.value);
-      
-      playerId.value = villages.value[0]?.player_id || null;
-      console.log('Set playerId:', playerId.value);
-      
-      return true;
-      
+        }
+      })
+
+      console.log('Processed villages:', villages.value)
+
+      playerId.value = villages.value[0]?.player_id || null
+      console.log('Set playerId:', playerId.value)
+
+      return true
     } catch (e) {
-      console.error('Error fetching villages:', e);
-      error.value = `Failed to load villages for "${playerName.value}".`;
-      return false;
+      console.error('Error fetching villages:', e)
+      error.value = `Failed to load villages for "${playerName.value}".`
+      return false
     }
-    
   } catch (e) {
-    console.error('Error in loadAll:', e);
-    error.value = `Failed to load data for "${playerName.value}".`;
-    return false;
+    console.error('Error in loadAll:', e)
+    error.value = `Failed to load data for "${playerName.value}".`
+    return false
   }
 }
 
-/* zoom init + resize */
 /* zoom init + resize */
 let zoomInited = false
 let roMap = null
@@ -1145,118 +1119,86 @@ function ensureZoom () {
   if (zoomInited) return
   if (!svg.value || !viewportEl.value) return
 
-  // Helper: keep zoom extents in sync with container size + world bounds
   const updateZoomExtents = () => {
     const r = getContainerRect()
     if (!r) return
-
-    // extent = screen-space (px) box the zoom uses as its viewport
     zoom.extent([[0, 0], [r.width, r.height]])
-
-    // translateExtent = world-space bounds (your viewBox / map units)
-    // This prevents panning outside WORLD without custom snap/clamp fights.
     zoom.translateExtent([[WORLD.x0, WORLD.y0], [WORLD.x1, WORLD.y1]])
   }
 
-  // Create d3 zoom behavior with panning disabled
   zoom = d3.zoom()
     .scaleExtent([0.1, 50])
     .filter((event) => {
-      // Only allow wheel events for zooming, disable all other interactions
-      if (event.type === 'wheel') return true;
-      return false;
+      if (event.type === 'wheel') return true
+      return false
     })
     .on('zoom', (event) => {
-      const { transform } = event;
-      const rect = getContainerRect();
-      
-      if (!rect) return;
-      
-      // Calculate center of the container
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      
-      // Create a transform that only applies zoom (keeps the center fixed)
+      const { transform } = event
+      const rect = getContainerRect()
+      if (!rect) return
+
+      const centerX = rect.width / 2
+      const centerY = rect.height / 2
+
       const newTransform = d3.zoomIdentity
         .translate(centerX, centerY)
         .scale(transform.k)
-        .translate(-centerX / transform.k, -centerY / transform.k);
-      
-      // Apply the transform to the viewport
-      d3.select(viewportEl.value).attr('transform', newTransform);
-      
-      // Update UI state
-      zoomK.value = transform.k;
-      updateLabels();
+        .translate(-centerX / transform.k, -centerY / transform.k)
+
+      d3.select(viewportEl.value).attr('transform', newTransform)
+
+      zoomK.value = transform.k
+      updateLabels()
     })
 
-  // Get container dimensions
-  const containerRect = getContainerRect();
-  
-  // Apply zoom to SVG with proper constraints
+  const containerRect = getContainerRect()
+
   const zoomSelection = d3.select(svg.value)
     .call(zoom)
-    .on('dblclick.zoom', null); // redundant with filter, but harmless
-    
-  // Only apply initial transform if we have container dimensions
+    .on('dblclick.zoom', null)
+
   if (containerRect) {
-    // Store the initial transform
     const initialTransform = d3.zoomIdentity
       .translate(containerRect.width / 2, containerRect.height / 2)
-      .scale(0.5);
-    
-    // Apply the initial transform
-    zoomSelection.call(zoom.transform, initialTransform);
-    
-    // Also apply it directly to the viewport to prevent any flicker
-    d3.select(viewportEl.value).attr('transform', initialTransform);
+      .scale(0.5)
+
+    zoomSelection.call(zoom.transform, initialTransform)
+    d3.select(viewportEl.value).attr('transform', initialTransform)
   }
 
-  // Handle wheel events for smooth zooming centered on the viewport
   if (mapAreaEl.value) {
     mapAreaEl.value.addEventListener(
       'wheel',
       (e) => {
-        // Only prevent default if not holding ctrl (to allow page zoom with ctrl+wheel)
         if (!e.ctrlKey) {
-          e.preventDefault();
-          
-          // Calculate zoom factor based on wheel delta
-          const delta = -e.deltaY * (e.deltaMode === 1 ? 0.05 : e.deltaMode ? 1 : 0.002);
-          const zoomFactor = Math.exp(delta);
-          
-          // Get current transform
-          const t = d3.zoomTransform(svg.value);
-          
-          // Calculate new scale with bounds checking
-          const newK = Math.max(0.1, Math.min(50, t.k * zoomFactor));
-          
-          // Only update if scale changed
+          e.preventDefault()
+
+          const delta = -e.deltaY * (e.deltaMode === 1 ? 0.05 : e.deltaMode ? 1 : 0.002)
+          const zoomFactor = Math.exp(delta)
+
+          const t = d3.zoomTransform(svg.value)
+          const newK = Math.max(0.1, Math.min(50, t.k * zoomFactor))
+
           if (newK !== t.k) {
-            // Get container dimensions
-            const rect = getContainerRect();
-            if (!rect) return;
-            
-            // Calculate center of the container
-            const centerX = rect.width / 2;
-            const centerY = rect.height / 2;
-            
-            // Create a new transform that keeps the center point fixed
+            const rect = getContainerRect()
+            if (!rect) return
+
+            const centerX = rect.width / 2
+            const centerY = rect.height / 2
+
             const newTransform = d3.zoomIdentity
               .translate(centerX, centerY)
               .scale(newK)
-              .translate(-centerX / newK, -centerY / newK);
-            
-            // Apply the new transform
-            d3.select(svg.value).call(zoom.transform, newTransform);
+              .translate(-centerX / newK, -centerY / newK)
+
+            d3.select(svg.value).call(zoom.transform, newTransform)
           }
         }
       },
       { passive: false }
-    );
+    )
   }
 
-  // ResizeObserver: update extents & labels on size change
   roMap = new ResizeObserver(async () => {
     await raf2()
     updateZoomExtents()
@@ -1265,13 +1207,11 @@ function ensureZoom () {
 
   if (mapAreaEl.value) roMap.observe(mapAreaEl.value)
 
-  // Initialize extents once
   updateZoomExtents()
   updateLabels()
 
   zoomInited = true
 }
-
 
 /* CSV download */
 function downloadCsv() {
@@ -1302,84 +1242,64 @@ function downloadCsv() {
 }
 
 /* lifecycle */
-// Add resetViewNoAnimation function
 function resetViewNoAnimation() {
   const rect = getContainerRect()
   if (!rect) return
-  
-  // Calculate the scale to fit the world view
+
   const worldWidth = WORLD.x1 - WORLD.x0
   const worldHeight = WORLD.y1 - WORLD.y0
   const scaleX = rect.width / (worldWidth * 1.1)
   const scaleY = rect.height / (worldHeight * 1.1)
   const scale = Math.min(scaleX, scaleY, 1)
-  
-  // Center the view
+
   const tx = (rect.width - worldWidth * scale) / 2 - WORLD.x0 * scale
   const ty = (rect.height - worldHeight * scale) / 2 - WORLD.y0 * scale
-  
-  // Apply transform immediately without animation
+
   suppressSnap = true
   const transform = d3.zoomIdentity
     .translate(tx, ty)
     .scale(scale)
-  
+
   d3.select(svg.value)
     .call(zoom.transform, transform)
-  
-  // Update labels immediately
+
   updateLabels()
   suppressSnap = false
 }
 
 onMounted(async () => {
   try {
-    console.log('Component mounted, initializing...');
-    console.log('Player name:', playerName.value);
-    
-    // First, ensure the container is properly sized
-    await nextTick();
-    console.log('Container should be ready');
-    
-    // Initialize zoom first to set up the behavior
-    ensureZoom();
-    console.log('Zoom behavior initialized');
-    
-    // Load data
-    console.log('Loading data...');
-    const loadSuccess = await loadAll();
-    console.log('Data loaded, success:', loadSuccess);
-    
-    await nextTick();
-    console.log('Villages after load:', villages.value);
-    
+    console.log('Component mounted, initializing...')
+    console.log('Player name:', playerName.value)
+
+    await nextTick()
+    ensureZoom()
+
+    const loadSuccess = await loadAll()
+    console.log('Data loaded, success:', loadSuccess)
+
+    await nextTick()
+
     if (villages.value.length > 0) {
-      // Draw markers
-      console.log('Drawing markers...');
-      drawMarkers();
-      
-      // Set initial zoom level (centered at 0,0)
-      console.log('Setting initial zoom level');
-      const scale = 0.5;
-      
-      // Apply the transform through D3 zoom to ensure consistency
+      drawMarkers()
+
+      const scale = 0.5
       const transform = d3.zoomIdentity
-        .translate(0, 0) // Keep centered at origin
-        .scale(scale);
-      
+        .translate(0, 0)
+        .scale(scale)
+
       d3.select(svg.value)
-        .call(zoom.transform, transform);
-      
-      // Update labels
-      updateLabels();
+        .call(zoom.transform, transform)
+
+      updateLabels()
     }
   } catch (error) {
     console.error('Error during initialization:', error)
   }
 })
 
-onBeforeUnmount(() => { 
-  if (roMap && mapAreaEl.value) roMap.unobserve(mapAreaEl.value) 
+onBeforeUnmount(() => {
+  if (roMap && mapAreaEl.value) roMap.unobserve(mapAreaEl.value)
   document.removeEventListener('click', handleClickOutside)
 })
 </script>
@@ -1471,14 +1391,14 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   pointer-events: all;
-  
+
   &.highlighted {
     stroke: #ffeb3b !important;
     stroke-width: 0.2 !important;
     filter: drop-shadow(0 0 3px rgba(255, 235, 59, 0.8));
     animation: pulse 1.5s infinite;
   }
-  
+
   @keyframes pulse {
     0% { filter: drop-shadow(0 0 2px rgba(255, 235, 59, 0.8)); }
     50% { filter: drop-shadow(0 0 5px rgba(255, 235, 59, 1)); }

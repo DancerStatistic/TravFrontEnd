@@ -1912,28 +1912,118 @@ function toggleRulers() {
 }
 
 /* === Marker loading === */
-const CACHE_KEY = 'markersCache'
+/* === Marker loading ===
+   IMPORTANT:
+   - localStorage has ~5MB quota and will explode for /api/markers payloads.
+   - IndexedDB is designed for this (tens/hundreds of MB depending on browser).
+*/
+const CACHE_KEY = 'markersCache'              // legacy key (we will delete from localStorage)
+const IDB_DB = 'travistat-cache'
+const IDB_STORE = 'kv'
+const IDB_KEY_MARKERS = 'markersCache:v1'
 const CACHE_TTL = 15 * 60 * 1000
+const NO_ALLIANCE_KEY = 'no-alliance'
+const NO_ALLIANCE_LABEL = 'No Alliance'
 
-async function reloadMarkers(force = false) {
+
+function openIdb () {
+  return new Promise((resolve, reject) => {
+    if (!('indexedDB' in window)) return reject(new Error('IndexedDB not supported'))
+
+    const req = indexedDB.open(IDB_DB, 1)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE)
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error || new Error('IndexedDB open failed'))
+  })
+}
+
+async function idbGet (key) {
+  const db = await openIdb()
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readonly')
+      const store = tx.objectStore(IDB_STORE)
+      const req = store.get(key)
+      req.onsuccess = () => resolve(req.result ?? null)
+      req.onerror = () => reject(req.error || new Error('IndexedDB get failed'))
+    })
+  } finally {
+    try { db.close() } catch {}
+  }
+}
+
+async function idbSet (key, value) {
+  const db = await openIdb()
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      const store = tx.objectStore(IDB_STORE)
+      const req = store.put(value, key)
+      req.onsuccess = () => resolve()
+      req.onerror = () => reject(req.error || new Error('IndexedDB put failed'))
+    })
+  } finally {
+    try { db.close() } catch {}
+  }
+}
+
+async function idbDel (key) {
+  const db = await openIdb()
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      const store = tx.objectStore(IDB_STORE)
+      const req = store.delete(key)
+      req.onsuccess = () => resolve()
+      req.onerror = () => reject(req.error || new Error('IndexedDB delete failed'))
+    })
+  } finally {
+    try { db.close() } catch {}
+  }
+}
+
+/** Best-effort: remove the legacy localStorage cache so it never triggers quota again */
+function purgeLegacyLocalStorageMarkersCache () {
+  try {
+    localStorage.removeItem(CACHE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+async function reloadMarkers (force = false) {
   loading.value = true
   try {
+    purgeLegacyLocalStorageMarkersCache()
+
     let payload = null
+
+    // Try IndexedDB cache (unless force)
     if (!force) {
       try {
-        const raw = localStorage.getItem(CACHE_KEY)
-        if (raw) {
-          const { at, data } = JSON.parse(raw)
-          if (Date.now() - at < CACHE_TTL) payload = data
+        const env = await idbGet(IDB_KEY_MARKERS)
+        if (env?.data && typeof env.at === 'number') {
+          if (Date.now() - env.at < CACHE_TTL) payload = env.data
         }
       } catch {
-        localStorage.removeItem(CACHE_KEY)
+        // ignore and re-fetch
       }
     }
+
+    // Fetch from API if needed
     if (!payload) {
       const { data } = await api.get('/api/markers')
       payload = data
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), data }))
+
+      // Store big payload in IndexedDB (never localStorage)
+      try {
+        await idbSet(IDB_KEY_MARKERS, { at: Date.now(), data })
+      } catch {
+        // ignore (still works without cache)
+      }
     }
 
     markers.value = payload?.markers || ''
@@ -1943,20 +2033,131 @@ async function reloadMarkers(force = false) {
     }
 
     await nextTick()
+    // Split "no alliance" players out of the Natars bucket (client-side) so they can be toggled separately.
+    splitNoAllianceFromNatars()
     bindMarkerEvents()
     updateMarkersVisibility()
 
     rebuildMinimapPoints()
     syncMinimapBounds()
-
     setInitialCenteredViewIfPossible()
   } catch (error) {
     console.error('Error loading markers:', error)
     markers.value = ''
     toggles.value = { alliances: '', tribes: '' }
+
+    // If cached data caused issues, nuke the cache key
+    try { await idbDel(IDB_KEY_MARKERS) } catch {}
   } finally {
     loading.value = false
   }
+}
+
+function hasClassPrefix(el, prefix) {
+  return Array.from(el.classList).some((c) => c.startsWith(prefix))
+}
+
+function extractTooltipValue(html, key) {
+  // Tooltip is backend-provided HTML with <br> separators.
+  // Keep parsing conservative to avoid brittle coupling to backend formatting.
+  const s = String(html || '')
+  const m = s.match(new RegExp(`${key}\\s*:\\s*([^<\\n]+)`, 'i'))
+  return m ? String(m[1] || '').trim() : ''
+}
+
+function ensureNoAllianceToggle() {
+  // Remove any previously injected no-alliance toggle (prevents duplicates if sidebar re-renders)
+  document.querySelectorAll('.no-alliance-toggle').forEach((el) => el.remove())
+
+  // If the sidebar already includes our id, do nothing
+  if (document.getElementById(`toggleAlliance-${NO_ALLIANCE_KEY}`)) return
+
+  const natarsInput = document.getElementById('toggleAlliance-natars')
+  if (!natarsInput) return
+
+  const natarsWrapper = natarsInput.closest('label') || natarsInput.parentElement
+  if (!natarsWrapper || !natarsWrapper.parentElement) return
+
+  const clone = natarsWrapper.cloneNode(true)
+  clone.classList.add('no-alliance-toggle')
+
+  // Update input id + keep checked
+  const input = clone.querySelector('input')
+  if (input) {
+    input.id = `toggleAlliance-${NO_ALLIANCE_KEY}`
+    input.checked = true
+    input.classList.add('alliance-checkbox')
+  }
+
+  // Force label text to "No Alliance" (replace any occurrence of Natars inside the clone)
+  // This is robust across different HTML structures.
+  const allTextNodes = []
+  const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT)
+  while (walker.nextNode()) allTextNodes.push(walker.currentNode)
+
+  let replaced = false
+  for (const tn of allTextNodes) {
+    if (String(tn.nodeValue || '').toLowerCase().includes('natars')) {
+      tn.nodeValue = String(tn.nodeValue).replace(/natars/gi, NO_ALLIANCE_LABEL)
+      replaced = true
+    }
+  }
+
+  // If we didn’t find “Natars” text nodes at all, set a sensible fallback.
+  if (!replaced) {
+    const labelEl = clone.querySelector('.label, .q-item__label, span, div')
+    if (labelEl) labelEl.textContent = NO_ALLIANCE_LABEL
+  }
+
+  // Insert after Natars entry
+  natarsWrapper.parentElement.insertBefore(clone, natarsWrapper.nextSibling)
+}
+
+function splitNoAllianceFromNatars() {
+  const root = markersGroup.value
+  if (!root) return
+
+  const nodes = root.querySelectorAll('.marker')
+  nodes.forEach((node) => {
+    const alliance = getClassValue(node, 'alliance-')
+    const tribe = getClassValue(node, 'tribe-')
+    const tip = node.getAttribute('data-tooltip') || ''
+
+    const tooltipAlliance = extractTooltipValue(tip, 'Alliance')
+    const tooltipTribe = extractTooltipValue(tip, 'Tribe')
+
+    // "No alliance" heuristic:
+    // - Backend grouped missing alliances under "Natars".
+    // - True Natars villages have tribe "Natars".
+    const looksLikeNatarsBucket =
+      alliance === 'natars' || String(tooltipAlliance).toLowerCase() === 'natars'
+    const isTribeNatars =
+      tribe === 'natars' || String(tooltipTribe).toLowerCase() === 'natars'
+
+    // If it's in the Natars bucket but NOT actually Natars tribe => treat as No Alliance.
+    if (looksLikeNatarsBucket && !isTribeNatars) {
+      // Remove existing alliance-* class
+      Array.from(node.classList)
+        .filter((c) => c.startsWith('alliance-'))
+        .forEach((c) => node.classList.remove(c))
+
+      node.classList.add(`alliance-${NO_ALLIANCE_KEY}`)
+
+      // Keep tooltip readable
+      if (tip) {
+        const updated = tip.replace(/Alliance\s*:\s*Natars/gi, `Alliance: ${NO_ALLIANCE_LABEL}`)
+        node.setAttribute('data-tooltip', updated)
+      }
+    }
+
+    // If there is NO alliance class at all, treat as No Alliance as well.
+    if (!hasClassPrefix(node, 'alliance-')) {
+      node.classList.add(`alliance-${NO_ALLIANCE_KEY}`)
+    }
+  })
+
+  // Ensure sidebar toggle exists so filtering works.
+  ensureNoAllianceToggle()
 }
 
 /* === Marker filtering/visibility === */
