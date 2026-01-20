@@ -30,6 +30,7 @@
               </q-card-section>
             </q-card>
           </div>
+
           <div class="col-12 col-sm-6 col-md-3">
             <q-card flat bordered class="stat-card">
               <q-card-section class="text-center">
@@ -39,6 +40,7 @@
               </q-card-section>
             </q-card>
           </div>
+
           <div class="col-12 col-sm-6 col-md-3">
             <q-card flat bordered class="stat-card">
               <q-card-section class="text-center">
@@ -48,6 +50,7 @@
               </q-card-section>
             </q-card>
           </div>
+
           <div class="col-12 col-sm-6 col-md-3">
             <q-card flat bordered class="stat-card">
               <q-card-section class="text-center">
@@ -56,6 +59,13 @@
                 <div class="text-caption text-grey-7">Avg Population</div>
               </q-card-section>
             </q-card>
+          </div>
+        </div>
+
+        <div class="row q-mt-md">
+          <div class="col-12 row justify-end q-gutter-sm">
+            <q-btn dense outline icon="refresh" label="Refresh" :loading="loading" @click="refresh()" />
+            <q-btn dense outline icon="delete" label="Clear cache (today)" :disable="loading" @click="clearTodayCache()" />
           </div>
         </div>
       </div>
@@ -187,7 +197,7 @@
 
               <template #body-cell-population="props">
                 <q-td :props="props" class="text-right">
-                  <strong class="text-primary">{{ props.value.toLocaleString() }}</strong>
+                  <strong class="text-primary">{{ Number(props.value || 0).toLocaleString() }}</strong>
                 </q-td>
               </template>
 
@@ -211,11 +221,47 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onActivated } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from 'boot/axios'
 
 const router = useRouter()
+
+/* -----------------------------
+ * Daily keys (UTC day)
+ * ----------------------------- */
+function todayKeyUTC () {
+  return new Date().toISOString().slice(0, 10)
+}
+const TODAY = todayKeyUTC()
+
+function safeReadLS (key) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function safeWriteLS (key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // ignore
+  }
+}
+
+function safeRemoveLS (key) {
+  try { localStorage.removeItem(key) } catch {}
+}
+
+/* -----------------------------
+ * Cache keys
+ * ----------------------------- */
+const PLAYERS_CACHE_KEY = `players:list:${TODAY}`
+const PLAYER_ALLIANCE_MAP_KEY = `playerAllianceByName:${TODAY}`
 
 /* -----------------------------
  * State
@@ -246,103 +292,6 @@ const columns = [
 ]
 
 /* -----------------------------
- * Player→Alliance enrichment cache
- * ----------------------------- */
-const TODAY = new Date().toISOString().slice(0, 10)
-const PLAYER_ALLIANCE_CACHE_KEY = `playerAllianceByName:${TODAY}`
-const PLAYER_ALLIANCE_CACHE_TTL = 1000 * 60 * 60 // 60 minutes
-
-function loadPlayerAllianceMapFromCache () {
-  try {
-    const raw = localStorage.getItem(PLAYER_ALLIANCE_CACHE_KEY)
-    if (!raw) return null
-    const { ts, data } = JSON.parse(raw)
-    if (!ts || !data || typeof data !== 'object') return null
-    if ((Date.now() - ts) > PLAYER_ALLIANCE_CACHE_TTL) return null
-    return data
-  } catch {
-    return null
-  }
-}
-
-function savePlayerAllianceMapToCache (map) {
-  try {
-    localStorage.setItem(PLAYER_ALLIANCE_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: map }))
-  } catch {
-    // ignore
-  }
-}
-
-/**
- * IMPORTANT FIX:
- * /api/villages (alias of /api/marker_rows) returns injected fields:
- *   - player in player_name / player
- *   - alliance in "alliance" (NOT alliance_tag)
- * so we must read v.alliance as well.
- */
-function readVillagePlayerName (v) {
-  return (
-    v?.player_name ??
-    v?.playerName ??
-    v?.player ??
-    v?.owner ??
-    v?.player_name_param ??
-    ''
-  ).toString().trim()
-}
-
-function readVillageAllianceTag (v) {
-  const raw =
-    (v?.alliance ??            // <-- injected by backend
-     v?.alliance_tag ??
-     v?.allianceTag ??
-     v?.ally_tag ??
-     v?.allyTag ??
-     v?.ally ??
-     '') ?? ''
-  const tag = String(raw).trim()
-  // normalize empties to Natars (consistent with other pages)
-  return tag || 'Natars'
-}
-
-async function buildPlayerAllianceMap () {
-  const cached = loadPlayerAllianceMapFromCache()
-  if (cached) return cached
-
-  const map = {}
-
-  // Try the same endpoint(s) your logs show are responding 200
-  const tryFetch = async (url) => {
-    const { data } = await api.get(url)
-    return data
-  }
-
-  let villages = []
-  try {
-    const data = await tryFetch('/api/villages?limit=20000')
-    villages = Array.isArray(data) ? data : (Array.isArray(data?.villages) ? data.villages : [])
-  } catch {
-    try {
-      const data = await tryFetch('/api/villages')
-      villages = Array.isArray(data) ? data : (Array.isArray(data?.villages) ? data.villages : [])
-    } catch {
-      villages = []
-    }
-  }
-
-  for (const v of villages) {
-    const player = readVillagePlayerName(v)
-    if (!player) continue
-
-    const tag = readVillageAllianceTag(v)
-    if (!map[player]) map[player] = tag
-  }
-
-  savePlayerAllianceMapToCache(map)
-  return map
-}
-
-/* -----------------------------
  * Navigation
  * ----------------------------- */
 function goToSelectedPlayer () {
@@ -355,6 +304,9 @@ function onSelectedPlayer (val) {
   router.push({ name: 'player-detail', params: { name: val.value } })
 }
 
+/* -----------------------------
+ * Autocomplete filter
+ * ----------------------------- */
 function filterPlayers (needle, update) {
   update(() => {
     optionsLoading.value = true
@@ -389,51 +341,149 @@ const totalPopulation = computed(() => filteredPlayers.value.reduce((sum, p) => 
 const avgPopulation = computed(() => filteredPlayers.value.length ? Math.round(totalPopulation.value / filteredPlayers.value.length) : 0)
 
 /* -----------------------------
- * Load data
+ * Player→Alliance enrichment map (cached per day)
  * ----------------------------- */
-async function loadPlayers () {
-  loading.value = true
+function readVillagePlayerName (v) {
+  return (
+    v?.player_name ??
+    v?.playerName ??
+    v?.player ??
+    v?.owner ??
+    v?.player_name_param ??
+    ''
+  ).toString().trim()
+}
+
+function readVillageAllianceTag (v) {
+  const raw =
+    (v?.alliance ??            // <-- injected by backend
+     v?.alliance_tag ??
+     v?.allianceTag ??
+     v?.ally_tag ??
+     v?.allyTag ??
+     v?.ally ??
+     '') ?? ''
+  const tag = String(raw).trim()
+  return tag || 'Natars'
+}
+
+async function buildPlayerAllianceMap () {
+  const cached = safeReadLS(PLAYER_ALLIANCE_MAP_KEY)
+  if (cached && typeof cached === 'object') return cached
+
+  const map = {}
+
+  // Try fetch big once; if your backend ignores limit, it still works.
+  let villages = []
   try {
-    const { data } = await api.get('/api/players?limit=10000')
-    const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
+    const { data } = await api.get('/api/villages?limit=20000')
+    villages = Array.isArray(data) ? data : (Array.isArray(data?.villages) ? data.villages : [])
+  } catch {
+    try {
+      const { data } = await api.get('/api/villages')
+      villages = Array.isArray(data) ? data : (Array.isArray(data?.villages) ? data.villages : [])
+    } catch {
+      villages = []
+    }
+  }
 
-    // Build enrichment map (always; it is fast enough and guarantees alliance population)
-    const allianceMap = await buildPlayerAllianceMap()
+  for (const v of villages) {
+    const player = readVillagePlayerName(v)
+    if (!player) continue
+    if (map[player]) continue // keep first hit (fast)
 
-    players.value = rows
-      .map((p) => {
-        const name =
-          (p?.name ?? p?.player_name ?? p?.playerName ?? p?.player)?.toString().trim() || ''
+    const tag = readVillageAllianceTag(v)
+    map[player] = tag
+  }
 
-        // try direct fields from /api/players
-        let alliance =
-          (p?.alliance ?? p?.alliance_tag ?? p?.allianceTag)?.toString().trim() || ''
+  safeWriteLS(PLAYER_ALLIANCE_MAP_KEY, map)
+  return map
+}
 
-        // fallback to villages-derived map (keyed by player name)
-        if (!alliance && name) alliance = String(allianceMap?.[name] || '').trim()
+/* -----------------------------
+ * Load + normalize
+ * ----------------------------- */
+function normalizePlayer (p, allianceMap) {
+  const name =
+    (p?.name ?? p?.player_name ?? p?.playerName ?? p?.player)?.toString().trim() || ''
 
-        // normalize empty to Natars for consistent UI
-        if (!alliance) alliance = 'Natars'
+  // direct (if backend provides it)
+  let alliance =
+    (p?.alliance ?? p?.alliance_tag ?? p?.allianceTag)?.toString().trim() || ''
 
-        return {
-          ...p,
-          name,
-          alliance,
-          villages: Number(p?.villages ?? 0),
-          population: Number(p?.population ?? 0)
-        }
-      })
-      .filter(p => p.name.length > 0)
-  } catch (err) {
-    console.error('Failed to load players:', err)
-    players.value = []
-  } finally {
-    loading.value = false
+  // fallback derived from villages
+  if (!alliance && name) alliance = String(allianceMap?.[name] || '').trim()
+
+  // normalize for UI consistency
+  if (!alliance) alliance = 'Natars'
+
+  return {
+    ...p,
+    name,
+    alliance,
+    villages: Number(p?.villages ?? 0),
+    population: Number(p?.population ?? 0)
   }
 }
 
+async function fetchAndBuildPlayers () {
+  // build alliance map (cached for today)
+  const allianceMap = await buildPlayerAllianceMap()
+
+  // fetch players (usually small)
+  const { data } = await api.get('/api/players?limit=10000')
+  const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
+
+  const normalized = rows
+    .map(p => normalizePlayer(p, allianceMap))
+    .filter(p => p.name.length > 0)
+
+  return normalized
+}
+
+/* -----------------------------
+ * Cache-first + SWR
+ * ----------------------------- */
+async function loadPlayers () {
+  const cached = safeReadLS(PLAYERS_CACHE_KEY)
+  if (Array.isArray(cached) && cached.length) {
+    players.value = cached
+    // background refresh to self-heal if cache is stale/wrong
+    refreshPlayers({ silent: true })
+    return
+  }
+
+  await refreshPlayers({ silent: false })
+}
+
+async function refreshPlayers ({ silent }) {
+  if (!silent) loading.value = true
+  try {
+    const normalized = await fetchAndBuildPlayers()
+    players.value = normalized
+    safeWriteLS(PLAYERS_CACHE_KEY, normalized)
+  } catch (err) {
+    console.error('Failed to load players:', err)
+    if (!players.value.length) players.value = []
+  } finally {
+    if (!silent) loading.value = false
+  }
+}
+
+/* -----------------------------
+ * Actions
+ * ----------------------------- */
+async function refresh () {
+  clearTodayCache()
+  await loadPlayers()
+}
+
+function clearTodayCache () {
+  safeRemoveLS(PLAYERS_CACHE_KEY)
+  safeRemoveLS(PLAYER_ALLIANCE_MAP_KEY)
+}
+
 onMounted(loadPlayers)
-onActivated(loadPlayers)
 </script>
 
 <style scoped lang="scss">

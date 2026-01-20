@@ -50,8 +50,8 @@
                   <q-card-section class="row items-center no-wrap">
                     <q-icon name="bolt" size="22px" class="text-amber-7 q-mr-sm" />
                     <div>
-                      <div class="text-subtitle2">Real-time updates</div>
-                      <div class="text-caption text-grey-6">Fresh data synced every hour from game servers</div>
+                      <div class="text-subtitle2">Daily updates</div>
+                      <div class="text-caption text-grey-6">Fresh data synced once per day</div>
                     </div>
                   </q-card-section>
                 </q-card>
@@ -108,7 +108,7 @@
                   :text-color="loading ? 'grey-8' : 'white'"
                   :icon="loading ? 'hourglass_empty' : 'check_circle'"
                 >
-                  {{ loading ? 'Syncing' : 'Live' }}
+                  {{ loading ? 'Syncing' : 'Cached' }}
                 </q-chip>
               </q-card-section>
 
@@ -198,42 +198,40 @@
                         <q-item-section>
                           <q-item-label class="text-weight-medium">{{ scope.opt.label }}</q-item-label>
                           <q-item-label caption>
-                            <q-icon name="shield" size="12px" class="q-mr-xs" />
-                            {{ scope.opt.alliance || 'No alliance' }}
-                            • {{ (scope.opt.villages || 0).toLocaleString() }} villages
-                            • {{ (scope.opt.population || 0).toLocaleString() }} pop
+                            {{ (scope.opt.alliance || '—') }} • {{ (scope.opt.villages || 0).toLocaleString() }} villages
                           </q-item-label>
+                        </q-item-section>
+                        <q-item-section side class="text-right">
+                          <div class="text-weight-bold text-primary">
+                            {{ (scope.opt.population || 0).toLocaleString() }}
+                          </div>
+                          <div class="text-caption text-grey-6">pop</div>
                         </q-item-section>
                       </q-item>
                     </template>
                   </q-select>
 
-                  <div class="text-caption text-grey-6 q-mt-xs">
-                    <q-icon name="info" size="14px" class="q-mr-xs" />
-                    Type to filter, then select from dropdown
-                  </div>
-                </div>
-
-                <div class="q-mt-md row q-col-gutter-sm">
-                  <div class="col-12 col-sm-6">
-                    <q-btn
-                      to="/player"
-                      color="primary"
-                      unelevated
-                      icon="leaderboard"
-                      label="Player Rankings"
-                      class="full-width"
-                    />
-                  </div>
-                  <div class="col-12 col-sm-6">
-                    <q-btn
-                      to="/alliance"
-                      color="secondary"
-                      outline
-                      icon="groups"
-                      label="Alliances"
-                      class="full-width"
-                    />
+                  <div class="row q-col-gutter-sm q-mt-sm">
+                    <div class="col-12 col-sm-6">
+                      <q-btn
+                        outline
+                        rounded
+                        icon="person"
+                        label="Players"
+                        class="full-width"
+                        to="/player"
+                      />
+                    </div>
+                    <div class="col-12 col-sm-6">
+                      <q-btn
+                        outline
+                        rounded
+                        icon="groups"
+                        label="Alliances"
+                        class="full-width"
+                        to="/alliance"
+                      />
+                    </div>
                   </div>
                 </div>
               </q-card-section>
@@ -250,79 +248,75 @@
       <div class="container">
         <div class="section-head">
           <div>
-            <div class="section-kicker">
-              <q-icon name="insights" size="14px" class="q-mr-xs" />
-              Game Intelligence
-            </div>
-            <h2 class="section-title">Power dynamics at your fingertips</h2>
+            <div class="section-kicker">At a glance</div>
+            <h2 class="section-title">Useful signals, not just counts</h2>
             <div class="section-subtitle">
-              Real-time leaderboards, population distribution analysis, and expansion velocity metrics. See who's rising,
-              who's stagnating, and where opportunities lie.
+              Top players right now + population distribution + villages-per-player spread.
             </div>
           </div>
 
           <div class="row items-center q-gutter-sm">
-            <q-btn to="/map" color="primary" outline rounded icon="map" label="Open Map" />
-            <q-btn to="/region" color="primary" flat rounded icon="terrain" label="Regions" />
+            <q-btn
+              to="/map"
+              color="primary"
+              outline
+              rounded
+              icon="map"
+              label="Open Map"
+            />
+            <q-btn
+              to="/region"
+              color="primary"
+              flat
+              rounded
+              icon="terrain"
+              label="Regions"
+            />
           </div>
         </div>
 
         <div class="row q-col-gutter-lg q-mt-md">
-          <!-- LEFT: Top Players -->
+          <!-- Top players -->
           <div class="col-12 col-md-5">
             <q-card flat bordered class="panel">
               <q-card-section class="row items-center justify-between">
-                <div class="text-subtitle1 text-weight-bold">
-                  <q-icon name="emoji_events" size="20px" class="q-mr-xs text-amber-7" />
-                  Top Players
-                </div>
-                <q-chip dense square color="grey-2" text-color="grey-8" icon="sort">by population</q-chip>
+                <div class="text-subtitle1 text-weight-bold">Top players</div>
+                <q-chip dense square color="grey-2" text-color="grey-8" icon="sort">
+                  by population
+                </q-chip>
               </q-card-section>
-
               <q-separator />
 
               <q-card-section>
                 <div v-if="loading">
-                  <q-item v-for="i in 6" :key="i" class="q-mb-sm">
-                    <q-item-section avatar><q-skeleton type="circle" size="30px" /></q-item-section>
-                    <q-item-section>
-                      <q-item-label><q-skeleton type="text" width="65%" /></q-item-label>
-                      <q-item-label caption><q-skeleton type="text" width="45%" /></q-item-label>
-                    </q-item-section>
-                    <q-item-section side class="text-right">
-                      <q-skeleton type="text" width="52px" />
-                      <div class="q-mt-xs"><q-skeleton type="text" width="28px" /></div>
-                    </q-item-section>
-                  </q-item>
+                  <q-skeleton v-for="i in 6" :key="i" type="QItem" class="q-mb-sm" />
                 </div>
 
                 <q-list v-else dense padding class="top-list">
-                  <q-item v-for="(p, idx) in topPlayers" :key="p.name" clickable @click="goPlayer(p.name)">
+                  <q-item
+                    v-for="(p, idx) in topPlayers"
+                    :key="p.name"
+                    clickable
+                    @click="goPlayer(p.name)"
+                  >
                     <q-item-section avatar>
-                      <q-avatar
-                        size="32px"
-                        :color="idx < 3 ? 'amber-7' : 'grey-3'"
-                        :text-color="idx < 3 ? 'white' : 'grey-8'"
-                      >
-                        <q-icon v-if="idx === 0" name="military_tech" size="18px" />
-                        <span v-else>{{ idx + 1 }}</span>
+                      <q-avatar size="30px" color="grey-2" text-color="grey-8">
+                        {{ idx + 1 }}
                       </q-avatar>
                     </q-item-section>
 
                     <q-item-section>
                       <q-item-label class="text-weight-medium">{{ p.name }}</q-item-label>
                       <q-item-label caption>
-                        <q-icon name="shield" size="12px" class="q-mr-xs" />
-                        {{ p.alliance || 'No alliance' }}
-                        <span class="q-mx-xs">•</span>
-                        <q-icon name="location_city" size="12px" class="q-mr-xs" />
-                        {{ (p.villages || 0).toLocaleString() }} villages
+                        {{ (p.alliance || '—') }} • {{ (p.villages || 0).toLocaleString() }} villages
                       </q-item-label>
                     </q-item-section>
 
                     <q-item-section side class="text-right">
-                      <div class="text-weight-bold text-primary">{{ (p.population || 0).toLocaleString() }}</div>
-                      <div class="text-caption text-grey-6">population</div>
+                      <div class="text-weight-bold text-primary">
+                        {{ (p.population || 0).toLocaleString() }}
+                      </div>
+                      <div class="text-caption text-grey-6">pop</div>
                     </q-item-section>
                   </q-item>
                 </q-list>
@@ -333,112 +327,39 @@
                   color="primary"
                   flat
                   icon-right="arrow_forward"
-                  label="View full rankings & analytics"
+                  label="See full player table"
                   class="full-width"
                 />
               </q-card-section>
             </q-card>
           </div>
 
-          <!-- RIGHT -->
+          <!-- Distribution charts -->
           <div class="col-12 col-md-7">
             <div class="row q-col-gutter-lg">
-              <!-- Population Distribution -->
-
-              <!-- Top Alliances -->
-              <div class="col-12">
-                <q-card flat bordered class="panel">
-                  <q-card-section class="row items-center justify-between">
-                    <div class="text-subtitle1 text-weight-bold">
-                      <q-icon name="groups" size="20px" class="q-mr-xs text-purple-7" />
-                      Top Alliances
-                    </div>
-                    <q-chip dense square color="grey-2" text-color="grey-8" icon="sort">by total pop</q-chip>
-                  </q-card-section>
-
-                  <q-separator />
-
-                  <q-card-section>
-                    <div v-if="loading">
-                      <q-item v-for="i in 6" :key="i" class="q-mb-sm">
-                        <q-item-section avatar><q-skeleton type="circle" size="30px" /></q-item-section>
-                        <q-item-section>
-                          <q-item-label><q-skeleton type="text" width="55%" /></q-item-label>
-                          <q-item-label caption><q-skeleton type="text" width="40%" /></q-item-label>
-                        </q-item-section>
-                        <q-item-section side class="text-right">
-                          <q-skeleton type="text" width="62px" />
-                          <div class="q-mt-xs"><q-skeleton type="text" width="34px" /></div>
-                        </q-item-section>
-                      </q-item>
-                    </div>
-
-                    <q-list v-else dense padding class="top-list">
-                      <q-item v-for="(a, idx) in topAlliances" :key="a.tag" clickable @click="goAlliance(a.tag)">
-                        <q-item-section avatar>
-                          <q-avatar
-                            size="32px"
-                            :color="idx < 3 ? 'purple-7' : 'grey-3'"
-                            :text-color="idx < 3 ? 'white' : 'grey-8'"
-                          >
-                            <q-icon v-if="idx === 0" name="workspace_premium" size="18px" />
-                            <span v-else>{{ idx + 1 }}</span>
-                          </q-avatar>
-                        </q-item-section>
-
-                        <q-item-section>
-                          <q-item-label class="text-weight-medium">
-                            {{ a.tag }}
-                            <span v-if="a.name" class="text-caption text-grey-6"> — {{ a.name }}</span>
-                          </q-item-label>
-                          <q-item-label caption>
-                            <q-icon name="people" size="12px" class="q-mr-xs" />
-                            {{ (a.players || 0).toLocaleString() }} members
-                            <span class="q-mx-xs">•</span>
-                            <q-icon name="location_city" size="12px" class="q-mr-xs" />
-                            {{ (a.villages || 0).toLocaleString() }} villages
-                          </q-item-label>
-                        </q-item-section>
-
-                        <q-item-section side class="text-right">
-                          <div class="text-weight-bold text-primary">{{ (a.population || 0).toLocaleString() }}</div>
-                          <div class="text-caption text-grey-6">population</div>
-                        </q-item-section>
-                      </q-item>
-                    </q-list>
-
-                    <q-separator class="q-my-sm" />
-                    <q-btn
-                      to="/alliance"
-                      color="primary"
-                      flat
-                      icon-right="arrow_forward"
-                      label="View all alliances"
-                      class="full-width"
-                    />
-                  </q-card-section>
-                </q-card>
-              </div>
-
+              <!-- Population buckets -->
               <div class="col-12">
                 <q-card flat bordered class="panel">
                   <q-card-section class="row items-center justify-between">
                     <div>
-                      <div class="text-subtitle1 text-weight-bold">
-                        <q-icon name="bar_chart" size="20px" class="q-mr-xs text-blue-7" />
-                        Population Distribution
+                      <div class="text-subtitle1 text-weight-bold">Population distribution</div>
+                      <div class="text-caption text-grey-6">
+                        Players grouped by population buckets
                       </div>
-                      <div class="text-caption text-grey-6">Player power tiers across the server</div>
                     </div>
 
-                    <q-chip dense square color="grey-2" text-color="grey-8" icon="analytics">by range</q-chip>
+                    <q-chip dense square color="grey-2" text-color="grey-8" icon="bar_chart">
+                      buckets
+                    </q-chip>
                   </q-card-section>
 
                   <q-separator />
 
                   <q-card-section>
                     <div v-if="loading" class="row q-col-gutter-sm">
-                      <div class="col-12"><q-skeleton type="rect" height="160px" /></div>
+                      <div class="col-12">
+                        <q-skeleton type="rect" height="140px" />
+                      </div>
                     </div>
 
                     <div v-else class="bars">
@@ -446,94 +367,60 @@
                         v-for="b in popBuckets"
                         :key="b.label"
                         class="bar"
-                        :title="`${b.label}: ${b.count.toLocaleString()} players (${Math.round((b.count / Math.max(1, totals.players)) * 100)}% of total)`"
+                        :title="`${b.label}: ${b.count.toLocaleString()} players`"
                       >
                         <div class="bar__head">
-                          <div class="bar__label">
-                            <q-icon name="group" size="14px" class="q-mr-xs" />
-                            {{ b.label }}
-                          </div>
-                          <div class="bar__value">
-                            {{ b.count.toLocaleString() }}
-                            <span class="text-caption text-grey-6 q-ml-xs">
-                              ({{ Math.round((b.count / Math.max(1, totals.players)) * 100) }}%)
-                            </span>
-                          </div>
+                          <div class="bar__label">{{ b.label }}</div>
+                          <div class="bar__value">{{ b.count.toLocaleString() }}</div>
                         </div>
                         <div class="bar__track">
                           <div class="bar__fill" :style="{ width: `${b.pct}%` }"></div>
                         </div>
                       </div>
                     </div>
-
-                    <div v-if="!loading" class="q-mt-md">
-                      <q-banner dense rounded class="bg-blue-1 text-blue-9">
-                        <template #avatar>
-                          <q-icon name="lightbulb" color="blue-7" />
-                        </template>
-                        <span class="text-caption">
-                          Most players ({{ mostPopBucketPct }}%) are in the {{ mostPopBucketLabel }} range
-                        </span>
-                      </q-banner>
-                    </div>
                   </q-card-section>
                 </q-card>
               </div>
 
-              <!-- Expansion Metrics -->
+              <!-- Villages per player -->
               <div class="col-12">
                 <q-card flat bordered class="panel">
                   <q-card-section class="row items-center justify-between">
                     <div>
-                      <div class="text-subtitle1 text-weight-bold">
-                        <q-icon name="timeline" size="20px" class="q-mr-xs text-green-7" />
-                        Expansion Metrics
+                      <div class="text-subtitle1 text-weight-bold">Villages per player</div>
+                      <div class="text-caption text-grey-6">
+                        Shows how concentrated expansion is
                       </div>
-                      <div class="text-caption text-grey-6">Village count distribution reveals expansion patterns</div>
                     </div>
 
-                    <q-chip dense square color="grey-2" text-color="grey-8" icon="insights">statistics</q-chip>
+                    <q-chip dense square color="grey-2" text-color="grey-8" icon="insights">
+                      spread
+                    </q-chip>
                   </q-card-section>
 
                   <q-separator />
 
                   <q-card-section>
                     <div v-if="loading">
-                      <q-skeleton type="rect" height="140px" />
+                      <q-skeleton type="rect" height="120px" />
                     </div>
 
                     <div v-else class="mini-grid">
                       <div class="mini">
-                        <div class="mini__label">
-                          <q-icon name="show_chart" size="12px" class="q-mr-xs" />
-                          Median
-                        </div>
+                        <div class="mini__label">Median</div>
                         <div class="mini__value">{{ villagesStats.median.toLocaleString() }}</div>
-                        <div class="text-caption text-grey-6 q-mt-xs">villages</div>
                       </div>
                       <div class="mini">
-                        <div class="mini__label">
-                          <q-icon name="functions" size="12px" class="q-mr-xs" />
-                          Average
-                        </div>
+                        <div class="mini__label">Average</div>
                         <div class="mini__value">{{ villagesStats.avg.toLocaleString() }}</div>
-                        <div class="text-caption text-grey-6 q-mt-xs">villages</div>
                       </div>
                       <div class="mini">
-                        <div class="mini__label">
-                          <q-icon name="trending_up" size="12px" class="q-mr-xs" />
-                          90th %
-                        </div>
+                        <div class="mini__label">90th pct</div>
                         <div class="mini__value">{{ villagesStats.p90.toLocaleString() }}</div>
-                        <div class="text-caption text-grey-6 q-mt-xs">elite tier</div>
                       </div>
                       <div class="mini">
-                        <div class="mini__label">
-                          <q-icon name="workspace_premium" size="12px" class="q-mr-xs" />
-                          Maximum
-                        </div>
+                        <div class="mini__label">Max</div>
                         <div class="mini__value">{{ villagesStats.max.toLocaleString() }}</div>
-                        <div class="text-caption text-grey-6 q-mt-xs">top player</div>
                       </div>
                     </div>
 
@@ -549,8 +436,7 @@
 
                     <div v-if="!loading" class="row q-mt-sm">
                       <div class="col text-caption text-grey-6">
-                        <q-icon name="info" size="14px" class="q-mr-xs" />
-                        Distribution: {{ villagesHistogram.map((h) => h.label).join(' • ') }}
+                        Histogram buckets: {{ villagesHistogram.map(h => h.label).join(' • ') }}
                       </div>
                     </div>
                   </q-card-section>
@@ -567,14 +453,10 @@
       <div class="container">
         <div class="section-head">
           <div>
-            <div class="section-kicker">
-              <q-icon name="extension" size="14px" class="q-mr-xs" />
-              Platform Features
-            </div>
-            <h2 class="section-title">Everything you need to dominate</h2>
+            <div class="section-kicker">Tools</div>
+            <h2 class="section-title">Explore the world from multiple angles</h2>
             <div class="section-subtitle">
-              Comprehensive tools for scouting, planning, and executing your strategy. From macro-level alliance warfare
-              to micro village management.
+              Jump into what you need — map, players, alliances, regions.
             </div>
           </div>
         </div>
@@ -583,25 +465,10 @@
           <q-card v-for="f in features" :key="f.title" flat bordered class="feature">
             <q-card-section>
               <div class="row items-start no-wrap">
-                <q-avatar size="48px" :color="f.color" text-color="white" class="q-mr-md">
-                  <q-icon :name="f.icon" size="28px" />
-                </q-avatar>
-                <div class="col">
-                  <div class="text-h6 q-mb-xs">{{ f.title }}</div>
-                  <div class="text-body2 text-grey-7">{{ f.description }}</div>
-                  <div class="q-mt-sm">
-                    <q-chip
-                      v-for="tag in f.tags"
-                      :key="tag"
-                      dense
-                      size="sm"
-                      color="grey-2"
-                      text-color="grey-8"
-                      class="q-mr-xs q-mb-xs"
-                    >
-                      {{ tag }}
-                    </q-chip>
-                  </div>
+                <q-icon :name="f.icon" size="34px" :color="f.color" class="q-mr-md" />
+                <div>
+                  <div class="text-h6">{{ f.title }}</div>
+                  <div class="text-body2 text-grey-7 q-mt-xs">{{ f.description }}</div>
                 </div>
               </div>
             </q-card-section>
@@ -613,40 +480,10 @@
                 color="primary"
                 :to="f.route"
                 icon-right="arrow_forward"
-                :label="f.actionLabel || 'Explore'"
+                label="Open"
               />
             </q-card-actions>
           </q-card>
-        </div>
-      </div>
-    </section>
-
-    <!-- WHY CHOOSE US -->
-    <section class="section section--light">
-      <div class="container">
-        <div class="section-head">
-          <div>
-            <div class="section-kicker">
-              <q-icon name="verified" size="14px" class="q-mr-xs" />
-              Why Our Platform
-            </div>
-            <h2 class="section-title">Built by players, for players</h2>
-            <div class="section-subtitle">
-              We understand the game because we play it. Every feature is designed to solve real strategic challenges.
-            </div>
-          </div>
-        </div>
-
-        <div class="row q-col-gutter-lg q-mt-md">
-          <div class="col-12 col-md-4" v-for="benefit in benefits" :key="benefit.title">
-            <q-card flat bordered class="benefit-card">
-              <q-card-section>
-                <q-icon :name="benefit.icon" size="42px" :color="benefit.color" />
-                <div class="text-h6 q-mt-md q-mb-sm">{{ benefit.title }}</div>
-                <div class="text-body2 text-grey-7">{{ benefit.description }}</div>
-              </q-card-section>
-            </q-card>
-          </div>
         </div>
       </div>
     </section>
@@ -656,21 +493,14 @@
       <div class="container">
         <q-card flat bordered class="cta-card">
           <q-card-section class="text-center">
-            <q-icon name="rocket_launch" size="48px" color="primary" class="q-mb-md" />
-            <div class="text-h4 text-weight-bold">Ready to gain the edge?</div>
-            <div class="text-body1 text-grey-7 q-mt-sm q-mb-md">
-              Join thousands of players using our analytics platform to make smarter decisions, spot threats early, and
-              identify opportunities before your competitors.
+            <div class="text-h4 text-weight-bold">Ready to explore?</div>
+            <div class="text-body1 text-grey-7 q-mt-sm">
+              Start with the interactive map, or jump straight to a player page.
             </div>
 
             <div class="row justify-center q-gutter-md q-mt-lg">
-              <q-btn to="/map" color="primary" unelevated rounded size="lg" icon="map" label="Start Exploring" />
-              <q-btn to="/player" color="secondary" outline rounded size="lg" icon="person" label="View Rankings" />
-            </div>
-
-            <div class="q-mt-lg text-caption text-grey-6">
-              <q-icon name="update" size="14px" class="q-mr-xs" />
-              Data updates hourly • Free to use • No registration required
+              <q-btn to="/map" color="primary" unelevated rounded icon="map" label="Open Map" />
+              <q-btn to="/player" color="secondary" outline rounded icon="person" label="Players" />
             </div>
           </q-card-section>
         </q-card>
@@ -678,589 +508,456 @@
     </section>
   </q-page>
 </template>
-<script setup lang="ts">
-  import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-  import { useRouter } from 'vue-router'
-  import { api } from 'boot/axios'
-  
-  type PlayerRow = {
-    name: string
-  
-    // common variants we might get from backend
-    alliance?: string | null
-    alliance_tag?: string | null
-    allianceTag?: string | null
-    alliance_id?: number | string | null
-    allianceId?: number | string | null
-    tag?: string | null
-  
-    villages?: number | null
-    population?: number | null
-  }
-  
-  type PlayerOption = {
-    label: string
-    value: string
-    alliance?: string | null
-    villages?: number | null
-    population?: number | null
-  }
-  
-  type AllianceRow = {
-    // common variants
-    id?: number | string | null
-    alliance_id?: number | string | null
-  
-    tag: string
-    name?: string | null
-  
-    players?: number | null
-    villages?: number | null
-    population?: number | null
-  
-    member_count?: number | null
-    villages_count?: number | null
-    total_population?: number | null
-    total_pop?: number | null
-  }
-  
-  const router = useRouter()
-  
-  const loading = ref(false)
-  const players = ref<PlayerRow[]>([])
-  const alliances = ref<AllianceRow[]>([])
-  const allianceTagById = ref<Record<string, string>>({})
-  
-  const alliancesCount = ref<number | null>(null)
-  const regionsCount = ref<number | null>(null)
-  
-  const selectedPlayer = ref<PlayerOption | null>(null)
-  const playerOptions = ref<PlayerOption[]>([])
-  const optionsLoading = ref(false)
-  
-  const playerAllianceByName = ref<Record<string, string>>({})
 
-  function toKey(v: unknown): string {
-    return (v ?? '').toString().trim()
-  }
-  
-  function normalizeAllianceTag(p: PlayerRow): string | null {
-  const direct =
-    p.alliance_tag ??
-    p.allianceTag ??
-    p.tag ??
-    (typeof p.alliance === 'string' ? p.alliance : null) ??
-    null
+<script setup>
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
+import { api } from 'boot/axios'
 
-  const d = toKey(direct)
-  if (d) return d
+const router = useRouter()
 
-  // fallback: hydrated from /api/player/:name/villages for top players
-  const byName = playerAllianceByName.value[toKey(p.name)]
-  if (byName) return byName
+/* =========================================================
+ * Client-side request throttling (daily-updated data)
+ * - Caches GET responses in localStorage for a TTL
+ * - Dedupes in-flight requests to avoid bursts
+ * ========================================================= */
+const CACHE_NS = 'travstat:api_cache:v1'
+const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000 // 6h (tune as desired)
 
-  // optional: id->tag fallback if you have it
-  const aid = toKey(p.alliance_id ?? p.allianceId ?? '')
-  if (aid && allianceTagById.value[aid]) return allianceTagById.value[aid]
+const inflight = new Map()
 
-  return null
+function cacheKey(url) {
+  return `${CACHE_NS}:${url}`
 }
 
-  
-  function goPlayer(name: string) {
-    const n = (name || '').trim()
-    if (!n) return
-    router.push({ name: 'player-detail', params: { name: n } })
+function safeJsonParse(s) {
+  try {
+    return JSON.parse(s)
+  } catch {
+    return null
   }
-  
-  function goAlliance(tag: string) {
-    const t = (tag || '').trim()
-    if (!t) return
-    router.push({ name: 'alliance-detail', params: { tag: t } })
+}
+
+function readCache(url) {
+  try {
+    const raw = localStorage.getItem(cacheKey(url))
+    if (!raw) return null
+    const obj = safeJsonParse(raw)
+    if (!obj || typeof obj.ts !== 'number') return null
+    return obj
+  } catch {
+    return null
   }
-  
-  function onSelectedPlayer(val: PlayerOption | null) {
-    if (!val?.value) return
-    goPlayer(val.value)
+}
+
+function writeCache(url, data) {
+  try {
+    localStorage.setItem(cacheKey(url), JSON.stringify({ ts: Date.now(), data }))
+  } catch {
+    // ignore quota / private-mode failures
   }
-  
-  function filterPlayers(needle: string, update: (cb: () => void) => void) {
-    update(() => {
-      optionsLoading.value = true
-      const n = (needle || '').trim().toLowerCase()
-  
-      let list: PlayerOption[] = (players.value || []).map((p) => ({
+}
+
+async function cachedGet(url, { ttlMs = DEFAULT_TTL_MS } = {}) {
+  const cached = readCache(url)
+  if (cached && Date.now() - cached.ts < ttlMs) return cached.data
+
+  if (inflight.has(url)) return inflight.get(url)
+
+  const p = api
+    .get(url)
+    .then((res) => {
+      const data = res?.data
+      writeCache(url, data)
+      return data
+    })
+    .finally(() => inflight.delete(url))
+
+  inflight.set(url, p)
+  return p
+}
+
+/* -----------------------------
+ * Data loading
+ * ----------------------------- */
+const loading = ref(false)
+const players = ref([])
+
+const alliancesCount = ref(null)
+const regionsCount = ref(null)
+
+/**
+ * Autocomplete state (q-select)
+ * - selectedPlayer: the chosen option object (or null)
+ * - playerOptions: the filtered list shown in the dropdown
+ * - optionsLoading: small loading flag for filter work
+ */
+const selectedPlayer = ref(null)
+const playerOptions = ref([])
+const optionsLoading = ref(false)
+
+function goPlayer(name) {
+  const n = (name || '').trim()
+  if (!n) return
+  router.push({ name: 'player-detail', params: { name: n } })
+}
+
+function onSelectedPlayer(val) {
+  // Only navigate when the user selects a real option from the list
+  if (!val || !val.value) return
+  goPlayer(val.value)
+}
+
+/**
+ * Filter callback for QSelect
+ * - Ensures user can type to narrow options,
+ *   but cannot submit an arbitrary name (only selectable options navigate).
+ */
+function filterPlayers(needle, update) {
+  update(() => {
+    optionsLoading.value = true
+    const n = (needle || '').trim().toLowerCase()
+
+    // base list: all players mapped to option objects
+    // keep it small in the dropdown: cap results
+    let list = (players.value || []).map((p) => ({
+      label: p.name,
+      value: p.name,
+      alliance: p.alliance,
+      villages: p.villages,
+      population: p.population
+    }))
+
+    if (n) {
+      list = list.filter((o) => (o.label || '').toLowerCase().includes(n))
+    }
+
+    // Sort by population desc so best matches feel useful
+    list.sort((a, b) => Number(b.population || 0) - Number(a.population || 0))
+
+    // cap to avoid huge menus
+    playerOptions.value = list.slice(0, 30)
+    optionsLoading.value = false
+  })
+}
+
+async function loadLandingData() {
+  loading.value = true
+  try {
+    // Players (for totals + charts + top list + autocomplete list)
+    // Cached to avoid refetching constantly across navigation/reloads.
+    const playersData = await cachedGet('/api/players?limit=1000', { ttlMs: DEFAULT_TTL_MS })
+    players.value = Array.isArray(playersData) ? playersData : []
+
+    // initialize options with top-population players (useful before typing)
+    playerOptions.value = [...players.value]
+      .sort((a, b) => Number(b?.population || 0) - Number(a?.population || 0))
+      .slice(0, 30)
+      .map((p) => ({
         label: p.name,
         value: p.name,
-        alliance: normalizeAllianceTag(p),
-        villages: p.villages ?? 0,
-        population: p.population ?? 0
+        alliance: p.alliance,
+        villages: p.villages,
+        population: p.population
       }))
-  
-      if (n) list = list.filter((o) => (o.label || '').toLowerCase().includes(n))
-      list.sort((a, b) => Number(b.population || 0) - Number(a.population || 0))
-  
-      playerOptions.value = list.slice(0, 50)
-      optionsLoading.value = false
-    })
-  }
-  
-  function buildAllianceIdTagIndex(list: AllianceRow[]) {
-    const idx: Record<string, string> = {}
-    for (const a of list || []) {
-      const tag = toKey(a.tag)
-      if (!tag) continue
-  
-      const id1 = toKey(a.id)
-      const id2 = toKey(a.alliance_id)
-      if (id1) idx[id1] = tag
-      if (id2) idx[id2] = tag
-    }
-    allianceTagById.value = idx
-  }
-  
-  async function loadLandingData() {
-    loading.value = true
+
+    // Alliances count (best-effort; supports {total} or array) - cached too
     try {
-      // 1) Alliances (first) -> build id->tag mapping before we normalize player alliance tags
-      try {
-        const aListRes = await api.get('/api/alliances?limit=2000')
-        const list = Array.isArray(aListRes.data)
-          ? (aListRes.data as AllianceRow[])
-          : Array.isArray((aListRes.data as any)?.data)
-            ? ((aListRes.data as any).data as AllianceRow[])
-            : []
-  
-        alliances.value = list
-        buildAllianceIdTagIndex(list)
-      } catch {
-        alliances.value = []
-        allianceTagById.value = {}
-      }
-  
-      // 2) Players
-      const playersRes = await api.get('/api/players?limit=2000')
-      players.value = Array.isArray(playersRes.data) ? (playersRes.data as PlayerRow[]) : []
-      const topNames = [...players.value]
-  .sort((a, b) => Number(b?.population || 0) - Number(a?.population || 0))
-  .slice(0, 12)
-  .map((p) => p.name)
-
-await hydrateTopPlayerAlliances(topNames)
-      // 3) Quick select options
-      playerOptions.value = [...players.value]
-        .sort((a, b) => Number(b?.population || 0) - Number(a?.population || 0))
-        .slice(0, 50)
-        .map((p) => ({
-          label: p.name,
-          value: p.name,
-          alliance: normalizeAllianceTag(p),
-          villages: p.villages ?? 0,
-          population: p.population ?? 0
-        }))
-  
-      // 4) Alliances count (supports {total} or list)
-      try {
-        const aRes = await api.get('/api/alliances')
-        if ((aRes as any)?.data && typeof (aRes as any).data.total === 'number') alliancesCount.value = (aRes as any).data.total
-        else if (Array.isArray((aRes as any).data)) alliancesCount.value = (aRes as any).data.length
-        else alliancesCount.value = null
-      } catch {
-        alliancesCount.value = null
-      }
-  
-      // 5) Regions count
-      try {
-        const rRes = await api.get('/api/region')
-        if (Array.isArray((rRes as any).data)) regionsCount.value = (rRes as any).data.length
-        else if ((rRes as any)?.data && typeof (rRes as any).data.total === 'number') regionsCount.value = (rRes as any).data.total
-        else regionsCount.value = null
-      } catch {
-        regionsCount.value = null
-      }
-    } finally {
-      loading.value = false
+      const aData = await cachedGet('/api/alliances', { ttlMs: DEFAULT_TTL_MS })
+      if (aData && typeof aData.total === 'number') alliancesCount.value = aData.total
+      else if (Array.isArray(aData)) alliancesCount.value = aData.length
+    } catch {
+      alliancesCount.value = null
     }
+
+    // Regions count (best-effort; supports array or {total}) - cached too
+    try {
+      const rData = await cachedGet('/api/region', { ttlMs: DEFAULT_TTL_MS })
+      if (Array.isArray(rData)) regionsCount.value = rData.length
+      else if (rData && typeof rData.total === 'number') regionsCount.value = rData.total
+    } catch {
+      regionsCount.value = null
+    }
+  } finally {
+    loading.value = false
   }
-  
-  async function hydrateTopPlayerAlliances(names: string[]) {
-  const out: Record<string, string> = { ...playerAllianceByName.value }
-
-  await Promise.allSettled(
-    names.map(async (name) => {
-      const n = (name || '').trim()
-      if (!n || out[n]) return
-
-      try {
-        const res = await api.get(`/api/player/${encodeURIComponent(n)}/villages`)
-        const vs = res.data?.villages || []
-        const tag = (vs?.[0]?.alliance_tag ?? vs?.[0]?.alliance ?? '').toString().trim()
-        if (tag) out[n] = tag
-      } catch {
-        // ignore; we'll just show "No alliance"
-      }
-    })
-  )
-
-  playerAllianceByName.value = out
 }
 
+/* -----------------------------
+ * Derived stats
+ * ----------------------------- */
+const totals = computed(() => {
+  const ps = players.value || []
+  const playersCount = ps.length
 
-  const totals = computed(() => {
-    const ps = players.value || []
-    const playersCount = ps.length
-  
-    let villages = 0
-    let population = 0
-  
-    for (const p of ps) {
-      villages += Number(p?.villages || 0)
-      population += Number(p?.population || 0)
-    }
-  
-    const avgPop = playersCount ? Math.round(population / playersCount) : 0
-    return { players: playersCount, villages, population, avgPop }
-  })
-  
-  const snapshotCaption = computed(() => {
-    const a = alliancesCount.value
-    const r = regionsCount.value
-    const parts: string[] = []
-    if (typeof a === 'number') parts.push(`${a.toLocaleString()} alliances`)
-    if (typeof r === 'number') parts.push(`${r.toLocaleString()} regions`)
-    if (!parts.length) return 'Updated hourly from live servers'
-    return `${parts.join(' • ')} tracked`
-  })
-  
-  const topPlayers = computed(() => {
-    return [...(players.value || [])]
-      .sort((a, b) => Number(b?.population || 0) - Number(a?.population || 0))
-      .slice(0, 8)
-      .map((p) => ({
-        ...p,
-        alliance: normalizeAllianceTag(p)
-      }))
-  })
-  
-  const popBuckets = computed(() => {
-    const ps = players.value || []
-    const buckets = [
-      { label: '< 1k', min: 0, max: 999, count: 0 },
-      { label: '1k–5k', min: 1000, max: 4999, count: 0 },
-      { label: '5k–10k', min: 5000, max: 9999, count: 0 },
-      { label: '10k–25k', min: 10000, max: 24999, count: 0 },
-      { label: '25k–50k', min: 25000, max: 49999, count: 0 },
-      { label: '50k+', min: 50000, max: Infinity, count: 0 }
-    ]
-  
-    for (const p of ps) {
-      const pop = Number(p?.population || 0)
-      const b = buckets.find((x) => pop >= x.min && pop <= x.max)
-      if (b) b.count += 1
-    }
-  
-    const maxCount = Math.max(1, ...buckets.map((b) => b.count))
-    return buckets.map((b) => ({ ...b, pct: Math.round((b.count / maxCount) * 100) }))
-  })
-  
-  const mostPopBucket = computed(() => {
-    const list = popBuckets.value
-    if (!list.length) return { label: '—', count: 0 }
-    return list.reduce((best, cur) => (cur.count > best.count ? cur : best), list[0])
-  })
-  const mostPopBucketLabel = computed(() => mostPopBucket.value.label)
-  const mostPopBucketPct = computed(() => {
-    const total = Math.max(1, totals.value.players)
-    return Math.round((mostPopBucket.value.count / total) * 100)
-  })
-  
-  function percentile(sorted: number[], p: number) {
-    if (!sorted.length) return 0
-    const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((p / 100) * (sorted.length - 1))))
-    return sorted[idx]
-  }
-  
-  const villagesStats = computed(() => {
-    const vs = (players.value || []).map((p) => Number(p?.villages || 0)).sort((a, b) => a - b)
-    if (!vs.length) return { median: 0, avg: 0, p90: 0, max: 0 }
-    const sum = vs.reduce((s, n) => s + n, 0)
-    return {
-      median: percentile(vs, 50),
-      avg: Math.round(sum / vs.length),
-      p90: percentile(vs, 90),
-      max: vs[vs.length - 1]
-    }
-  })
-  
-  const villagesHistogram = computed(() => {
-    const ps = players.value || []
-    const buckets = [
-      { label: '1', min: 1, max: 1, count: 0 },
-      { label: '2', min: 2, max: 2, count: 0 },
-      { label: '3–4', min: 3, max: 4, count: 0 },
-      { label: '5–7', min: 5, max: 7, count: 0 },
-      { label: '8–12', min: 8, max: 12, count: 0 },
-      { label: '13+', min: 13, max: Infinity, count: 0 }
-    ]
-  
-    for (const p of ps) {
-      const v = Number(p?.villages || 0)
-      const b = buckets.find((x) => v >= x.min && v <= x.max)
-      if (b) b.count += 1
-    }
-  
-    const maxCount = Math.max(1, ...buckets.map((b) => b.count))
-    return buckets.map((b) => ({ ...b, pct: Math.round((b.count / maxCount) * 100) }))
-  })
-  
-  const topAlliances = computed(() => {
-  const fromEndpoint = (alliances.value || [])
-    .map((a) => ({
-      tag: toKey(a.tag),
-      name: a.name ?? null,
-      players: Number(a.players ?? a.member_count ?? 0),
-      villages: Number(a.villages ?? a.villages_count ?? 0),
-      population: Number(a.population ?? a.total_population ?? a.total_pop ?? 0)
-    }))
-    .filter((a) => !!a.tag)
+  let villages = 0
+  let population = 0
 
-  const usable = fromEndpoint.filter((a) => a.population > 0 || a.players > 0 || a.villages > 0)
-  if (usable.length) return usable.sort((a, b) => b.population - a.population).slice(0, 8)
-
-  // fallback: aggregate from players by alliance tag
-  const m = new Map<
-    string,
-    { tag: string; name: string | null; players: number; villages: number; population: number }
-  >()
-
-  for (const p of players.value || []) {
-    const tag = normalizeAllianceTag(p)
-    if (!tag) continue
-    const cur = m.get(tag) || { tag, name: null, players: 0, villages: 0, population: 0 }
-    cur.players += 1
-    cur.villages += Number(p.villages || 0)
-    cur.population += Number(p.population || 0)
-    m.set(tag, cur)
+  for (const p of ps) {
+    villages += Number(p?.villages || 0)
+    population += Number(p?.population || 0)
   }
 
-  return [...m.values()].sort((a, b) => b.population - a.population).slice(0, 8)
+  const avgPop = playersCount ? Math.round(population / playersCount) : 0
+
+  return {
+    players: playersCount,
+    villages,
+    population,
+    avgPop
+  }
 })
 
-  
-  const features = [
-    {
-      title: 'Interactive World Map',
-      description:
-        'Visualize the entire game world with real-time village positions, alliance territories, and strategic chokepoints. Filter by player, alliance, or region.',
-      icon: 'map',
-      color: 'primary',
-      route: '/map',
-      actionLabel: 'Open Map',
-      tags: ['Real-time', 'Filters', 'Territory view']
-    },
-    {
-      title: 'Player Intelligence',
-      description:
-        'Deep-dive analytics on any player: growth trends, village distribution, alliance history, and comparative rankings. Track rivals and allies.',
-      icon: 'person_search',
-      color: 'secondary',
-      route: '/player',
-      actionLabel: 'View Players',
-      tags: ['Rankings', 'Trends', 'Comparisons']
-    },
-    {
-      title: 'Alliance Power Index',
-      description:
-        'Comprehensive alliance metrics: total strength, member activity, territorial control, and growth velocity. Identify dominant coalitions.',
-      icon: 'groups',
-      color: 'accent',
-      route: '/alliance',
-      actionLabel: 'Browse Alliances',
-      tags: ['Strength metrics', 'Members', 'Territory']
-    },
-    {
-      title: 'Regional Analysis',
-      description:
-        'Break down the map by regions to identify power vacuums, contested zones, and expansion opportunities. See who controls what.',
-      icon: 'terrain',
-      color: 'positive',
-      route: '/region',
-      actionLabel: 'View Regions',
-      tags: ['Control maps', 'Opportunities', 'Hotspots']
-    }
-  ] as const
-  
-  const benefits = [
-    {
-      title: 'Always Up-to-Date',
-      description:
-        'Our scraper pulls fresh data from game servers every hour, ensuring you always have the latest intelligence for critical decisions.',
-      icon: 'update',
-      color: 'blue-7'
-    },
-    {
-      title: 'Lightning Fast Search',
-      description:
-        'Find any player, alliance, or village in milliseconds. Optimized database queries mean zero lag, even with massive datasets.',
-      icon: 'bolt',
-      color: 'amber-7'
-    },
-    {
-      title: 'Strategic Edge',
-      description:
-        'Spot expansion patterns, identify weakening players, track alliance shifts, and discover undefended territories before anyone else.',
-      icon: 'psychology',
-      color: 'purple-7'
-    }
-  ] as const
-  
-  // Hero canvas particles
-  const heroCanvas = ref<HTMLCanvasElement | null>(null)
-  
-  let raf = 0
-  let ctx: CanvasRenderingContext2D | null = null
-  let w = 0
-  let h = 0
-  let particles: Array<{ x: number; y: number; r: number; vx: number; vy: number; a: number }> = []
-  let lastT = 0
-  let ro: ResizeObserver | null = null
-  
-  function rand(min: number, max: number) {
-    return Math.random() * (max - min) + min
+const snapshotCaption = computed(() => {
+  const a = alliancesCount.value
+  const r = regionsCount.value
+  const parts = []
+  if (typeof a === 'number') parts.push(`${a.toLocaleString()} alliances`)
+  if (typeof r === 'number') parts.push(`${r.toLocaleString()} regions`)
+  if (!parts.length) return 'Aggregated from the latest daily scrape'
+  return parts.join(' • ')
+})
+
+const topPlayers = computed(() => {
+  return [...(players.value || [])]
+    .sort((a, b) => Number(b?.population || 0) - Number(a?.population || 0))
+    .slice(0, 8)
+})
+
+/**
+ * Population buckets:
+ * - < 1k
+ * - 1k–5k
+ * - 5k–10k
+ * - 10k–25k
+ * - 25k–50k
+ * - 50k+
+ */
+const popBuckets = computed(() => {
+  const ps = players.value || []
+  const buckets = [
+    { label: '< 1k', min: 0, max: 999, count: 0 },
+    { label: '1k–5k', min: 1000, max: 4999, count: 0 },
+    { label: '5k–10k', min: 5000, max: 9999, count: 0 },
+    { label: '10k–25k', min: 10000, max: 24999, count: 0 },
+    { label: '25k–50k', min: 25000, max: 49999, count: 0 },
+    { label: '50k+', min: 50000, max: Infinity, count: 0 }
+  ]
+
+  for (const p of ps) {
+    const pop = Number(p?.population || 0)
+    const b = buckets.find((x) => pop >= x.min && pop <= x.max)
+    if (b) b.count += 1
   }
-  
-  function resizeCanvas() {
-    const c = heroCanvas.value
-    if (!c) return
-    const parent = c.parentElement
-    if (!parent) return
-  
-    const rect = parent.getBoundingClientRect()
-    w = Math.max(1, Math.floor(rect.width))
-    h = Math.max(1, Math.floor(rect.height))
-  
-    const dpr = Math.max(1, window.devicePixelRatio || 1)
-    c.width = Math.floor(w * dpr)
-    c.height = Math.floor(h * dpr)
-    c.style.width = `${w}px`
-    c.style.height = `${h}px`
-  
-    if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+  const maxCount = Math.max(1, ...buckets.map((b) => b.count))
+  return buckets.map((b) => ({
+    ...b,
+    pct: Math.round((b.count / maxCount) * 100)
+  }))
+})
+
+/**
+ * Villages stats (median, avg, p90, max) + histogram
+ */
+function percentile(sorted, p) {
+  if (!sorted.length) return 0
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((p / 100) * (sorted.length - 1))))
+  return sorted[idx]
+}
+
+const villagesStats = computed(() => {
+  const vs = (players.value || []).map((p) => Number(p?.villages || 0)).sort((a, b) => a - b)
+  if (!vs.length) return { median: 0, avg: 0, p90: 0, max: 0 }
+
+  const sum = vs.reduce((s, n) => s + n, 0)
+  return {
+    median: percentile(vs, 50),
+    avg: Math.round(sum / vs.length),
+    p90: percentile(vs, 90),
+    max: vs[vs.length - 1]
   }
-  
-  function initParticles() {
-    const count = Math.min(120, Math.max(70, Math.floor((w * h) / 16000)))
-    particles = Array.from({ length: count }).map(() => ({
-      x: rand(0, w),
-      y: rand(0, h),
-      r: rand(0.9, 2.4),
-      vx: rand(-0.14, 0.14),
-      vy: rand(-0.09, 0.09),
-      a: rand(0.2, 0.6)
-    }))
+})
+
+/**
+ * Histogram buckets (villages):
+ * 1 • 2 • 3–4 • 5–7 • 8–12 • 13+
+ */
+const villagesHistogram = computed(() => {
+  const ps = players.value || []
+  const buckets = [
+    { label: '1', min: 1, max: 1, count: 0 },
+    { label: '2', min: 2, max: 2, count: 0 },
+    { label: '3–4', min: 3, max: 4, count: 0 },
+    { label: '5–7', min: 5, max: 7, count: 0 },
+    { label: '8–12', min: 8, max: 12, count: 0 },
+    { label: '13+', min: 13, max: Infinity, count: 0 }
+  ]
+
+  for (const p of ps) {
+    const v = Number(p?.villages || 0)
+    const b = buckets.find((x) => v >= x.min && v <= x.max)
+    if (b) b.count += 1
   }
-  
-  function tick(t: number) {
-    raf = window.requestAnimationFrame(tick)
-    const dt = Math.min(40, t - lastT)
-    lastT = t
-    if (!ctx) return
-  
-    ctx.clearRect(0, 0, w, h)
-  
-    for (const p of particles) {
-      p.x += p.vx * dt
-      p.y += p.vy * dt
-  
-      if (p.x < -10) p.x = w + 10
-      if (p.x > w + 10) p.x = -10
-      if (p.y < -10) p.y = h + 10
-      if (p.y > h + 10) p.y = -10
-  
-      ctx.globalAlpha = p.a
-      ctx.beginPath()
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
-      ctx.fillStyle = '#ffffff'
-      ctx.fill()
-    }
-  
-    ctx.globalAlpha = 0.13
-    ctx.strokeStyle = '#ffffff'
-  
-    for (let i = 0; i < particles.length; i++) {
-      for (let j = i + 1; j < particles.length; j++) {
-        const a = particles[i]
-        const b = particles[j]
-        const dx = a.x - b.x
-        const dy = a.y - b.y
-        const d2 = dx * dx + dy * dy
-        if (d2 < 90 * 90) {
-          ctx.lineWidth = 1
-          ctx.beginPath()
-          ctx.moveTo(a.x, a.y)
-          ctx.lineTo(b.x, b.y)
-          ctx.stroke()
-        }
+
+  const maxCount = Math.max(1, ...buckets.map((b) => b.count))
+  return buckets.map((b) => ({
+    ...b,
+    pct: Math.round((b.count / maxCount) * 100)
+  }))
+})
+
+/* -----------------------------
+ * Features cards
+ * ----------------------------- */
+const features = [
+  {
+    title: 'Interactive Map',
+    description: 'Explore villages, alliances, and regions with filtering and quick navigation.',
+    icon: 'map',
+    color: 'primary',
+    route: '/map'
+  },
+  {
+    title: 'Player Analytics',
+    description: 'Rankings, village counts, population totals, and quick access to detail pages.',
+    icon: 'person',
+    color: 'secondary',
+    route: '/player'
+  },
+  {
+    title: 'Alliance Overview',
+    description: 'Strength, members, and comparative performance across the world.',
+    icon: 'groups',
+    color: 'accent',
+    route: '/alliance'
+  },
+  {
+    title: 'Region Analysis',
+    description: 'Regional snapshots: control patterns, top entities, and distribution.',
+    icon: 'terrain',
+    color: 'positive',
+    route: '/region'
+  }
+]
+
+/* -----------------------------
+ * Fancy hero animation (canvas particles)
+ * ----------------------------- */
+const heroCanvas = ref(null)
+
+let raf = 0
+let ctx = null
+let w = 0
+let h = 0
+let particles = []
+let lastT = 0
+
+function rand(min, max) {
+  return Math.random() * (max - min) + min
+}
+
+function setupCanvas() {
+  const c = heroCanvas.value
+  if (!c) return
+  ctx = c.getContext('2d', { alpha: true })
+  resizeCanvas()
+  initParticles()
+  lastT = performance.now()
+  tick(lastT)
+}
+
+function resizeCanvas() {
+  const c = heroCanvas.value
+  if (!c) return
+  const parent = c.parentElement
+  if (!parent) return
+  const rect = parent.getBoundingClientRect()
+  w = Math.max(1, Math.floor(rect.width))
+  h = Math.max(1, Math.floor(rect.height))
+  c.width = w * devicePixelRatio
+  c.height = h * devicePixelRatio
+  c.style.width = `${w}px`
+  c.style.height = `${h}px`
+  if (ctx) ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
+}
+
+function initParticles() {
+  const count = Math.min(110, Math.max(60, Math.floor((w * h) / 18000)))
+  particles = Array.from({ length: count }).map(() => ({
+    x: rand(0, w),
+    y: rand(0, h),
+    vx: rand(-0.18, 0.18),
+    vy: rand(-0.12, 0.12),
+    r: rand(0.8, 2.2),
+    a: rand(0.12, 0.35)
+  }))
+}
+
+function tick(t) {
+  raf = requestAnimationFrame(tick)
+  const dt = Math.min(32, t - lastT)
+  lastT = t
+  if (!ctx) return
+
+  ctx.clearRect(0, 0, w, h)
+
+  for (const p of particles) {
+    p.x += p.vx * dt
+    p.y += p.vy * dt
+
+    if (p.x < -20) p.x = w + 20
+    if (p.x > w + 20) p.x = -20
+    if (p.y < -20) p.y = h + 20
+    if (p.y > h + 20) p.y = -20
+
+    ctx.globalAlpha = p.a
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
+  }
+
+  // light connections
+  ctx.globalAlpha = 0.08
+  ctx.strokeStyle = '#ffffff'
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const a = particles[i]
+      const b = particles[j]
+      const dx = a.x - b.x
+      const dy = a.y - b.y
+      const d2 = dx * dx + dy * dy
+      if (d2 < 130 * 130) {
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(a.x, a.y)
+        ctx.lineTo(b.x, b.y)
+        ctx.stroke()
       }
     }
-  
-    ctx.globalAlpha = 1
   }
-  
-  function setupCanvas() {
-    const c = heroCanvas.value
-    if (!c) return
-    ctx = c.getContext('2d', { alpha: true })
-    if (!ctx) return
-    resizeCanvas()
-    initParticles()
-    lastT = performance.now()
-    tick(lastT)
-  }
-  
-  function cleanupCanvas() {
-    if (raf) window.cancelAnimationFrame(raf)
-    raf = 0
-    ctx = null
-    particles = []
-  }
-  
-  function onWinResize() {
-    resizeCanvas()
-    initParticles()
-  }
-  
-  function installResizeObserver() {
-    const c = heroCanvas.value
-    if (!c) return
-    const parent = c.parentElement
-    if (!parent) return
-  
-    ro = new ResizeObserver(() => {
-      resizeCanvas()
-      initParticles()
-    })
-    ro.observe(parent)
-    window.addEventListener('resize', onWinResize, { passive: true })
-  }
-  
-  function uninstallResizeObserver() {
-    if (ro) ro.disconnect()
-    ro = null
-    window.removeEventListener('resize', onWinResize)
-  }
-  
-  onMounted(async () => {
-    await loadLandingData()
-    setupCanvas()
-    installResizeObserver()
-  })
-  
-  onBeforeUnmount(() => {
-    uninstallResizeObserver()
-    cleanupCanvas()
-  })
-  </script>
+}
+
+/* -----------------------------
+ * Lifecycle
+ * ----------------------------- */
+function onResize() {
+  resizeCanvas()
+  initParticles()
+}
+
+onMounted(() => {
+  loadLandingData()
+  setupCanvas()
+  window.addEventListener('resize', onResize, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onResize)
+  if (raf) cancelAnimationFrame(raf)
+})
+</script>
   <style scoped lang="scss">
     .landing-page {
       min-height: 100vh;
