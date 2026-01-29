@@ -9,63 +9,79 @@ from datetime import datetime, timedelta, date
 from functools import wraps
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
 from dotenv import load_dotenv
 from flask import Flask, redirect, url_for, request, jsonify, make_response
-from flask_login import LoginManager, UserMixin, login_user, logout_user
 from flask_cors import CORS
 from supabase import create_client, Client
 from cachetools import TTLCache
+from redis_client import get_redis, redis_health_check, is_redis_enabled
+from cache import (
+    cache_get_json, cache_set_json, cache_get_gzip_json, cache_set_gzip_json,
+    cache_get_str, cache_set_str, cache_delete, cache_delete_pattern
+)
+
+# Import backend modules
+# Note: When running backend.py as a script, Python adds the current directory to sys.path
+# so imports from the backend/ package should work correctly
+try:
+    from backend.config import Config
+    from backend.auth import setup_auth, login_route_handler, logout_route_handler, require_auth, optional_auth
+    from backend.rate_limit import setup_rate_limiter
+    from backend.cache_manager import SQLCacheManager, SupabaseCacheManager
+except ImportError as e:
+    # Fallback: try adding current directory to path if import fails
+    import sys
+    import os
+    parent_dir = os.path.dirname(os.path.abspath(__file__))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    from backend.config import Config
+    from backend.auth import setup_auth, login_route_handler, logout_route_handler, require_auth, optional_auth
+    from backend.rate_limit import setup_rate_limiter
+    from backend.cache_manager import SQLCacheManager, SupabaseCacheManager
 
 # Load environment variables
 load_dotenv()
 
-# -------------------- Cache Variables -------------------- #
-_cached_sql: List[List[Optional[str]]] = []
-_last_sql_time = datetime.min
-_cached_date = datetime.min
-_cached_rows: List[Dict[str, Any]] = []
+# -------------------- Logging Setup (must be before config validation) -------------------- #
+# Configure structured logging
+file_handler = logging.FileHandler("web_app.log", encoding="utf-8")
+stream_handler = logging.StreamHandler()
+
+# Use structured format for file, simple format for console
+class StructuredFormatter(logging.Formatter):
+    """Custom formatter for structured logging."""
+    def format(self, record):
+        log_data = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'level': record.levelname,
+            'logger': record.name,
+            'message': record.getMessage(),
+            'module': record.module,
+            'function': record.funcName,
+            'line': record.lineno
+        }
+        if record.exc_info:
+            log_data['exception'] = self.formatException(record.exc_info)
+        return json.dumps(log_data)
+
+file_handler.setFormatter(StructuredFormatter())
+stream_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[file_handler, stream_handler]
+)
+logger = logging.getLogger("bot")
 
 # -------------------- Configuration -------------------- #
-@dataclass
-class Config:
-    # Flask Configuration
-    FLASK_SECRET: str = os.getenv("FLASK_SECRET", "dev-secret")
-    PERMANENT_SESSION_LIFETIME: int = 3600  # 1 hour in seconds
-    DEBUG: bool = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-    
-    # CORS Configuration
-    CORS_ORIGINS: List[str] = field(
-        default_factory=lambda: os.getenv("CORS_ORIGINS", "http://localhost:8080").split(",")
-    )
-    
-    # Supabase Configuration
-    SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "")
-    SUPABASE_KEY: str = os.environ.get("SUPABASE_KEY", "")
-    
-    # Cache Configuration
-    CACHE_TTL: int = int(os.getenv("CACHE_TTL", "3600"))  # 1 hour
-    SQL_CACHE_TTL: int = int(os.getenv("SQL_CACHE_TTL", "86400"))  # 24 hours
-    PAGE_SIZE: int = int(os.getenv("PAGE_SIZE", "1000"))  # Default page size for pagination
-    
-    # Map Configuration
-    SQL_FILE_URL: str = os.getenv("SQL_FILE_URL", "https://cw.x2.international.travian.com/map.sql")
-    
-    def validate(self) -> None:
-        """Validate required configuration values."""
-        if not self.SUPABASE_URL:
-            raise ValueError("SUPABASE_URL environment variable is required")
-        if not self.SUPABASE_KEY:
-            raise ValueError("SUPABASE_KEY environment variable is required")
-
 # Initialize config
 config = Config()
 try:
     config.validate()
-    logger = logging.getLogger("bot")
     logger.info("Configuration loaded successfully")
 except ValueError as e:
-    logging.error(f"Configuration error: {e}")
+    logger.error(f"Configuration error: {e}")
     raise
 
 # -------------------- Error Handling -------------------- #
@@ -278,36 +294,7 @@ from urllib.parse import urlparse
 import socket
 
 # -------------------- Logging -------------------- #
-class StructuredFormatter(logging.Formatter):
-    """Custom formatter for structured logging."""
-    def format(self, record):
-        log_data = {
-            'timestamp': datetime.utcnow().isoformat(),
-            'level': record.levelname,
-            'logger': record.name,
-            'message': record.getMessage(),
-            'module': record.module,
-            'function': record.funcName,
-            'line': record.lineno
-        }
-        if record.exc_info:
-            log_data['exception'] = self.formatException(record.exc_info)
-        return json.dumps(log_data)
-
-# Configure structured logging
-file_handler = logging.FileHandler("web_app.log", encoding="utf-8")
-stream_handler = logging.StreamHandler()
-
-# Use structured format for file, simple format for console
-file_handler.setFormatter(StructuredFormatter())
-stream_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[file_handler, stream_handler]
-)
-logger = logging.getLogger("bot")
-load_dotenv() 
+# (Logging is already configured above, this section removed to avoid duplication) 
 # -------------------- Flask & CORS Setup (MUST be before any @app.route) -------------------- #
 # -------------------- Flask & CORS Setup -------------------- #
 app = Flask(__name__)
@@ -336,19 +323,20 @@ def internal_error(error):
     return handle_api_error(APIError("Internal server error", 500))
 
 # -------------------- Login Manager -------------------- #
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = "login"
+login_manager = setup_auth(app, config)
 
-class User(UserMixin):
-    def __init__(self, id: str) -> None:
-        self.id = id
-
-_users = {"admin@example.com": {"password": "password123"}}
-
-@login_manager.user_loader
-def load_user(uid: str) -> Optional[User]:
-    return User(uid) if uid in _users else None
+# Setup rate limiting
+try:
+    limiter = setup_rate_limiter(app, config)
+except Exception as e:
+    logger.warning(f"Rate limiting setup failed: {e}. Continuing without rate limiting.")
+    # Create a no-op limiter
+    class NoOpLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(f):
+                return f
+            return decorator
+    limiter = NoOpLimiter()
 
 # -------------------- Supabase Setup -------------------- #
 # Initialize Supabase client using the config
@@ -360,9 +348,69 @@ supabase: Client = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
 logger.info("✅ Supabase client initialized")
 
 # -------------------- Supabase Cache -------------------- #
-CACHE_TTL     = timedelta(hours=1)
-_cached_date  = datetime.min
-_cached_rows: List[Dict[str,Any]] = []
+CACHE_TTL = timedelta(hours=1)
+supabase_cache_manager = SupabaseCacheManager(CACHE_TTL)
+
+# -------------------- SQL Cache -------------------- #
+SQL_CACHE_TTL = timedelta(hours=24)
+# Initialize SQL cache manager (must be done before fetch_sql_data() is called)
+sql_cache_manager = SQLCacheManager(SQL_CACHE_TTL)
+
+# -------------------- Latest Dump Date Resolver -------------------- #
+def _rpc_scalar(resp, key: str):
+    """
+    Supabase RPC responses can come back as:
+      - resp.data == [{"<key>": value}]  (common for SQL functions returning scalar)
+      - resp.data == value              (sometimes)
+    This helper normalizes both cases.
+    """
+    data = getattr(resp, "data", None)
+    if data is None:
+        return None
+    if isinstance(data, list):
+        if not data:
+            return None
+        row = data[0]
+        if isinstance(row, dict):
+            return row.get(key)
+        return row
+    if isinstance(data, dict):
+        return data.get(key)
+    return data
+
+
+def get_latest_dump_date() -> str:
+    """
+    Get the latest dump_date from Redis cache or Supabase RPC.
+
+    Caches the result in Redis for 300 seconds to reduce Supabase calls.
+    Falls back to today's date if Supabase is unreachable and cache is empty.
+    """
+    cached_date = cache_get_str("latest_dump_date")
+    if cached_date:
+        logger.debug(f"Latest dump_date from Redis cache: {cached_date}")
+        return cached_date
+
+    # Query Supabase via RPC
+    if supabase_reachable(1.0):
+        try:
+            resp = supabase.rpc("rpc_latest_dump_date", {}).execute()
+
+            latest = _rpc_scalar(resp, "rpc_latest_dump_date")
+            if latest:
+                # latest can be a date or string depending on client/driver
+                latest_str = latest.isoformat() if hasattr(latest, "isoformat") else str(latest)
+                cache_set_str("latest_dump_date", latest_str, ttl=300)
+                logger.info(f"Latest dump_date from Supabase RPC: {latest_str}")
+                return latest_str
+            else:
+                logger.warning("rpc_latest_dump_date returned no value (NULL).")
+        except Exception as e:
+            logger.warning(f"Failed to get latest dump_date from Supabase RPC: {e}")
+
+    today = date.today().isoformat()
+    logger.warning(f"Using fallback dump_date: {today}")
+    return today
 
 def supabase_reachable(timeout: float = 1.0) -> bool:
     """
@@ -388,10 +436,10 @@ def fetch_supabase_data() -> List[Dict[str,Any]]:
     Returns:
         List of village dictionaries, or empty list if fetch fails
     """
-    global _cached_date, _cached_rows
-    now = datetime.utcnow()
-    if _cached_rows and (now - _cached_date) < CACHE_TTL:
-        return _cached_rows
+    # Check cache first
+    cached = supabase_cache_manager.get()
+    if cached:
+        return cached
 
     # ⬇️ fast-fail: skip Supabase entirely if we can't reach it
     if not supabase_reachable(1.0):
@@ -423,7 +471,7 @@ def fetch_supabase_data() -> List[Dict[str,Any]]:
                 break
             offset += page_size
 
-        _cached_date, _cached_rows = now, all_rows
+        supabase_cache_manager.set(all_rows)
         logger.info("Fetched %d rows from Supabase for %s", len(all_rows), latest)
         return all_rows
     except Exception as e:
@@ -433,11 +481,8 @@ def fetch_supabase_data() -> List[Dict[str,Any]]:
 
 
 # -------------------- SQL Dump Setup -------------------- #
-SQL_FILE_URL   = "https://cw.x2.international.travian.com/map.sql"
-SQL_CACHE_TTL  = timedelta(hours=24)
-_last_sql_time = datetime.min
-_cached_sql: List[List[Optional[str]]] = []
-EXPECTED_COLS  = 16
+# SQL_CACHE_TTL is already defined above with sql_cache_manager
+EXPECTED_COLS = 16
 
 def extract_value_groups(body: str) -> List[str]:
     """
@@ -524,18 +569,24 @@ def fetch_sql_data() -> List[List[Optional[str]]]:
     Returns:
         List of parsed SQL rows (each row is a list of field values)
     """
-    global _last_sql_time, _cached_sql
-    now = datetime.utcnow()
-    if _cached_sql and (now - _last_sql_time) < SQL_CACHE_TTL:
-        return _cached_sql
+    # Ensure sql_cache_manager is initialized (defensive check)
+    if 'sql_cache_manager' not in globals():
+        logger.error("sql_cache_manager not initialized! This should not happen.")
+        raise RuntimeError("sql_cache_manager not initialized")
+    
+    # Check cache first
+    cached = sql_cache_manager.get()
+    if cached:
+        return cached
 
     try:
-        res = requests.get(SQL_FILE_URL, timeout=15)
+        res = requests.get(config.SQL_FILE_URL, timeout=15)
         res.raise_for_status()
         text = res.text
     except Exception as e:
         logger.error("Failed to download SQL dump: %s", e)
-        return _cached_sql
+        # Return cached data if available, otherwise empty list
+        return sql_cache_manager.get()
 
     rows: List[List[Optional[str]]] = []
     for line in text.splitlines():
@@ -550,7 +601,7 @@ def fetch_sql_data() -> List[List[Optional[str]]]:
                 continue
             rows.append(cols)
 
-    _cached_sql, _last_sql_time = rows, now
+    sql_cache_manager.set(rows)
     logger.info("Parsed %d rows from SQL dump", len(rows))
     return rows
 
@@ -678,8 +729,9 @@ def get_all_villages() -> List[Dict[str,Any]]:
         logger.warning(f"Supabase fetch failed: {e}")
 
     # ⬇️ strictly local fallback (no network):
-    if _cached_sql:
-        rows = _cached_sql
+    cached_sql = sql_cache_manager.get()
+    if cached_sql:
+        rows = cached_sql
         logger.info(f"Using cached SQL data: {len(rows)} rows")
     else:
         logger.info("Fetching SQL data (no cache available)")
@@ -864,6 +916,9 @@ class MetricsCollector:
         self.error_count = 0
         self.endpoint_times: Dict[str, List[float]] = {}
         self.start_time = datetime.utcnow()
+        self.redis_hits = 0
+        self.redis_misses = 0
+        self.supabase_queries = 0
         
     def record_request(self, endpoint: str, duration: float, is_error: bool = False):
         """Record a request metric."""
@@ -877,6 +932,18 @@ class MetricsCollector:
         if len(self.endpoint_times[endpoint]) > 1000:
             self.endpoint_times[endpoint] = self.endpoint_times[endpoint][-1000:]
     
+    def record_redis_hit(self):
+        """Record a Redis cache hit."""
+        self.redis_hits += 1
+    
+    def record_redis_miss(self):
+        """Record a Redis cache miss."""
+        self.redis_misses += 1
+    
+    def record_supabase_query(self):
+        """Record a Supabase query."""
+        self.supabase_queries += 1
+    
     def get_stats(self) -> Dict[str, Any]:
         """Get aggregated statistics."""
         uptime = (datetime.utcnow() - self.start_time).total_seconds()
@@ -889,17 +956,70 @@ class MetricsCollector:
                     'min_duration': min(times),
                     'max_duration': max(times)
                 }
+        redis_total = self.redis_hits + self.redis_misses
         return {
             'total_requests': self.request_count,
             'total_errors': self.error_count,
             'error_rate': self.error_count / self.request_count if self.request_count > 0 else 0,
             'uptime_seconds': uptime,
-            'endpoints': endpoint_stats
+            'endpoints': endpoint_stats,
+            'redis': {
+                'hits': self.redis_hits,
+                'misses': self.redis_misses,
+                'hit_ratio': self.redis_hits / redis_total if redis_total > 0 else 0
+            },
+            'supabase_queries': self.supabase_queries
         }
 
 metrics = MetricsCollector()
 
 # -------------------- API Endpoints -------------------- #
+
+@app.route("/api/admin/cache/clear", methods=["POST"])
+@api_error_handler
+def api_clear_cache():
+    """
+    Clear Redis and in-memory caches.
+    Intended for admin / maintenance use.
+    """
+    cleared = {
+        "redis": False,
+        "sql_cache": False,
+        "supabase_cache": False
+    }
+
+    # Clear Redis (use cache helpers, NOT redis_client)
+    try:
+        from cache import cache_delete_pattern
+
+        deleted = cache_delete_pattern("*")  # clears travistat:* via REDIS_PREFIX
+        cleared["redis"] = True
+        cleared["redis_keys_deleted"] = deleted
+    except Exception as e:
+        logger.warning(f"Redis cache clear failed: {e}")
+
+    # Clear in-memory SQL cache
+    try:
+        sql_cache_manager.clear()
+        cleared["sql_cache"] = True
+    except Exception as e:
+        logger.warning(f"SQL cache clear failed: {e}")
+
+    # Clear in-memory Supabase cache
+    try:
+        supabase_cache_manager.clear()
+        cleared["supabase_cache"] = True
+    except Exception as e:
+        logger.warning(f"Supabase cache clear failed: {e}")
+
+    logger.info(f"Cache clear requested: {cleared}")
+    return jsonify({
+        "status": "ok",
+        "cleared": cleared
+    })
+
+#--------------------- Clear Redis ----------------------#
+
 @app.route("/api/ping")
 @api_error_handler
 def api_ping():
@@ -920,89 +1040,465 @@ def health_check():
     Returns:
         JSON response with health status, cache stats, and metrics
     """
+    redis_health = redis_health_check()
     health_data = {
         'status': 'healthy',
         'timestamp': datetime.utcnow().isoformat(),
         'services': {
             'api': 'ok',
             'supabase': 'reachable' if supabase_reachable(1.0) else 'unreachable',
+            'redis': redis_health,
             'cache': {
-                'supabase': supabase_cache.stats(),
-                'sql': sql_cache.stats()
+                'in_memory': {
+                    'supabase': supabase_cache.stats(),
+                    'sql': sql_cache.stats()
+                },
+                'redis': redis_health
             }
         },
         'metrics': metrics.get_stats()
     }
     return jsonify(health_data), 200
 
+# -------------------- Authentication Routes -------------------- #
+@app.route("/api/login", methods=["POST"])
+@api_error_handler
+def login():
+    """Handle user login."""
+    return login_route_handler(config)
+
+@app.route("/api/logout", methods=["POST"])
+@api_error_handler
+def logout():
+    """Handle user logout."""
+    return logout_route_handler()
+
+@app.route("/api/cache/redis/markers/clear", methods=["POST"])
+@require_auth
+@api_error_handler
+def clear_redis_markers_cache():
+    """
+    Clear Redis marker-related caches (markers, region_map, alliance_map, player_map).
+    """
+    r = get_redis()
+    if not r:
+        raise APIError("Redis not configured", 400)
+
+    prefix = config.REDIS_PREFIX  # e.g. "travistat:"
+    patterns = [
+        f"{prefix}markers:*",
+        f"{prefix}region_map:*",
+        f"{prefix}alliance_map:*",
+        f"{prefix}player_map:*",
+        f"{prefix}regions:*",
+        f"{prefix}alliance_tags:*",
+    ]
+
+    deleted = 0
+    for pat in patterns:
+        # scan is safe; keys() can be heavy
+        for k in r.scan_iter(match=pat, count=1000):
+            r.delete(k)
+            deleted += 1
+
+    logger.info("Deleted %d Redis keys for marker caches", deleted)
+    return jsonify(success_response({"deleted": deleted}, "Redis marker caches cleared")[0])
+
+
 @app.route("/api/cache/clear", methods=["POST"])
+@require_auth
 @api_error_handler
 def clear_cache():
     """
-    Clear all caches (requires authentication in production).
-    
-    Returns:
-        JSON response with cache statistics after clearing
+    Clear all caches:
+      - In-memory TTL caches (supabase_cache, sql_cache)
+      - Redis keys under REDIS_PREFIX (if Redis enabled)
+
+    Returns JSON with what was cleared.
     """
+    # 1) Clear in-memory caches
     supabase_cache.clear()
     sql_cache.clear()
-    logger.info("Caches cleared by user request")
+
+    redis_deleted = 0
+    redis_enabled = False
+
+    # 2) Clear Redis caches (if configured)
+    try:
+        r = get_redis()
+        if r:
+            redis_enabled = True
+            prefix = getattr(config, "REDIS_PREFIX", "travistat:")
+            # Delete *all* keys for this app namespace
+            for k in r.scan_iter(match=f"{prefix}*", count=1000):
+                r.delete(k)
+                redis_deleted += 1
+    except Exception as e:
+        # Don’t fail the request if Redis delete has an issue
+        logger.warning("Redis cache clear failed: %s", e)
+
+    logger.info(
+        "Caches cleared by user request (in-memory cleared, redis_enabled=%s, redis_deleted=%d)",
+        redis_enabled,
+        redis_deleted
+    )
+
     return jsonify(success_response({
-        'cache_stats': {
-            'supabase': supabase_cache.stats(),
-            'sql': sql_cache.stats()
+        "cache_stats": {
+            "in_memory": {
+                "supabase": supabase_cache.stats(),
+                "sql": sql_cache.stats(),
+            },
+            "redis": {
+                "enabled": redis_enabled,
+                "deleted_keys": redis_deleted,
+                "prefix": getattr(config, "REDIS_PREFIX", "travistat:")
+            }
         }
     }, "Caches cleared", 200)[0])
 
+
 @app.route("/api/markers")
+@limiter.limit(config.RATE_LIMIT_STRICT)
 @api_error_handler
 def api_markers():
     """
     Get map markers with optional filtering.
-    
+
     Query Parameters:
         region (optional): Filter by region name
         alliance (optional): Filter by alliance tag
         player (optional): Filter by player name
-        
+        no_cache=1 (optional): Bypass Redis cache and force regeneration
+
     Returns:
         JSON response with SVG markers and filter checkboxes (raw format for frontend compatibility)
     """
     start_time = time.time()
-    villages = get_all_villages()
-    
-    # Apply filters if provided
-    region = request.args.get('region')
+
+    # Get latest dump_date for cache key
+    dump_date = get_latest_dump_date()
+
+    # Read filters
+    region = request.args.get("region", "").strip()
+    alliance = request.args.get("alliance", "").strip()
+    player = request.args.get("player", "").strip()
+
+    # Bypass cache escape hatch
+    bypass_cache = request.args.get("no_cache", "0") == "1"
+
+    # Build cache key from filters
+    cache_key_parts = [f"markers:{dump_date}"]
+
     if region:
-        region = validate_string_param(region, 'region')
-        villages = [v for v in villages if v.get('region', '').lower() == region.lower()]
-    
-    alliance = request.args.get('alliance')
+        region = validate_string_param(region, "region")
+        cache_key_parts.append(f"region={region}")
+
     if alliance:
-        alliance = validate_string_param(alliance, 'alliance')
-        villages = [v for v in villages if (v.get('alliance_tag') or '').lower() == alliance.lower()]
-    
-    player = request.args.get('player')
+        alliance = validate_string_param(alliance, "alliance")
+        cache_key_parts.append(f"alliance={alliance}")
+
     if player:
-        player = validate_string_param(player, 'player')
-        villages = [v for v in villages if (v.get('player_name') or '').lower() == player.lower()]
-    
-    logger.info(f"After filtering: {len(villages)} villages")
-    
-    # Return raw markers data (frontend expects this format)
+        player = validate_string_param(player, "player")
+        cache_key_parts.append(f"player={player}")
+
+    cache_key = ":".join(cache_key_parts)
+
+    # Try Redis cache first (unless bypassed)
+    if not bypass_cache:
+        cached_data = cache_get_gzip_json(cache_key)
+        if cached_data:
+            metrics.record_redis_hit()
+            logger.debug(f"Cache hit for markers: {cache_key}")
+            duration = time.time() - start_time
+            metrics.record_request("/api/markers", duration)
+            return jsonify(cached_data)
+
+    metrics.record_redis_miss()
+    logger.info(
+        f"Cache {'bypassed' if bypass_cache else 'miss'} for markers: {cache_key}, querying Supabase"
+    )
+
+    # Query Supabase with paging (NO 1000-cap)
+    villages: List[Dict[str, Any]] = []
+
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+
+            # IMPORTANT: avoid RPC here because you're seeing it cap at 1000.
+            # Use table paging so we always fetch the full dataset.
+            query = supabase.table("villages").select("*").eq("dump_date", dump_date)
+
+            # Apply server-side filters where possible (keeps payload smaller)
+            if region:
+                # Treat "None" specially (your fallback logic does this too)
+                if region.lower() == "none":
+                    # If your DB stores NULL/empty for "no region", you may need one of these approaches:
+                    # - eq("region", "") OR is_("region", "null") depending on your client.
+                    # Supabase-py supports .is_("col", "null") for SQL IS NULL.
+                    query = query.or_("region.is.null,region.eq.")
+                else:
+                    query = query.eq("region", region)
+
+            if alliance:
+                lower_alliance = alliance.strip().lower()
+                if lower_alliance == "natars":
+                    # Natars = empty/NULL alliance_tag in your Python fallback convention
+                    query = query.or_("alliance_tag.is.null,alliance_tag.eq.")
+                else:
+                    query = query.eq("alliance_tag", alliance)
+
+            if player:
+                query = query.eq("player_name", player)
+
+            # Page through results
+            page_size = 1000
+            offset = 0
+            while True:
+                chunk = query.range(offset, offset + page_size - 1).execute().data or []
+                villages.extend(chunk)
+                if len(chunk) < page_size:
+                    break
+                offset += page_size
+
+            logger.info(
+                f"Fetched {len(villages)} villages from Supabase TABLE paging for markers (dump_date={dump_date})"
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"Supabase TABLE query failed for markers: {e}, falling back to get_all_villages()"
+            )
+            villages = get_all_villages()
+
+            # Apply filters in Python as fallback
+            if region:
+                villages = [
+                    v
+                    for v in villages
+                    if (v.get("region") or "").strip().lower() == region.lower()
+                    or (region.lower() == "none" and not (v.get("region") or "").strip())
+                ]
+            if alliance:
+                villages = [
+                    v
+                    for v in villages
+                    if (v.get("alliance_tag") or "").strip().lower() == alliance.lower()
+                    or (alliance.lower() == "natars" and not (v.get("alliance_tag") or "").strip())
+                ]
+            if player:
+                villages = [
+                    v
+                    for v in villages
+                    if (v.get("player_name") or "").strip().lower() == player.lower()
+                ]
+    else:
+        villages = get_all_villages()
+
+        # Apply filters in Python as fallback
+        if region:
+            villages = [
+                v
+                for v in villages
+                if (v.get("region") or "").strip().lower() == region.lower()
+                or (region.lower() == "none" and not (v.get("region") or "").strip())
+            ]
+        if alliance:
+            villages = [
+                v
+                for v in villages
+                if (v.get("alliance_tag") or "").strip().lower() == alliance.lower()
+                or (alliance.lower() == "natars" and not (v.get("alliance_tag") or "").strip())
+            ]
+        if player:
+            villages = [
+                v
+                for v in villages
+                if (v.get("player_name") or "").strip().lower() == player.lower()
+            ]
+
+
+    logger.info(f"After filtering: {len(villages)} villages (dump_date={dump_date})")
+
+    # Generate markers data
+    markers_start = time.time()
+    logger.info("markers input villages=%d dump_date=%s", len(villages), dump_date)
     markers_data = generate_svg_markers(villages)
-    
+    markers_duration = time.time() - markers_start
+    logger.info(
+        f"Marker generation took {markers_duration:.2f}s for {len(villages)} villages"
+    )
+
+    # Cache the result (use gzip for large payloads)
+    # Only cache if not bypassed, so no_cache=1 truly forces regen without poisoning cache
+    if not bypass_cache:
+        cache_set_gzip_json(cache_key, markers_data, ttl=3600)
+
     # Log if markers are empty
     if not markers_data.get("markers"):
-        logger.warning(f"Generated markers are empty. Input villages: {len(villages)}")
+        logger.warning(
+            f"Generated markers are empty. Input villages: {len(villages)} (dump_date={dump_date})"
+        )
         if villages:
-            # Log first village structure for debugging
-            logger.info(f"Sample village structure: {list(villages[0].keys()) if villages else 'no villages'}")
-    
+            logger.info(
+                f"Sample village keys: {list(villages[0].keys())}"
+            )
+
     duration = time.time() - start_time
-    metrics.record_request('/api/markers', duration)
-    
+    metrics.record_request("/api/markers", duration)
+
     return jsonify(markers_data)
+
+# -------------------- Aliases for frontend compatibility (TradeRoutes) -------------------- #
+
+@app.route("/api/markers/latest")
+@limiter.limit(config.RATE_LIMIT_STRICT)
+@api_error_handler
+def api_markers_latest():
+    """
+    Alias for older frontend code that calls /api/markers/latest.
+    """
+    return api_markers()
+
+
+@app.route("/api/marker_rows")
+@limiter.limit(config.RATE_LIMIT_STRICT)
+@api_error_handler
+def api_marker_rows():
+    """
+    Return the raw marker rows (villages) for the latest dump_date.
+    This is the dataset TradeRoutes.vue expects: a JSON array of rows.
+
+    Query Parameters:
+        region (optional)
+        alliance (optional)
+        player (optional)
+        no_cache=1 (optional): bypass Redis cache
+    """
+    start_time = time.time()
+    dump_date = get_latest_dump_date()
+
+    region = request.args.get("region", "").strip()
+    alliance = request.args.get("alliance", "").strip()
+    player = request.args.get("player", "").strip()
+    bypass_cache = request.args.get("no_cache", "0") == "1"
+
+    # Normalize/validate (same behavior as /api/markers)
+    cache_key_parts = [f"marker_rows:{dump_date}"]
+
+    if region:
+        region = validate_string_param(region, "region")
+        cache_key_parts.append(f"region={region}")
+
+    if alliance:
+        alliance = validate_string_param(alliance, "alliance")
+        cache_key_parts.append(f"alliance={alliance}")
+
+    if player:
+        player = validate_string_param(player, "player")
+        cache_key_parts.append(f"player={player}")
+
+    cache_key = ":".join(cache_key_parts)
+
+    # Cache read (gzip because it can be large)
+    if not bypass_cache:
+        cached = cache_get_gzip_json(cache_key)
+        if cached is not None:
+            metrics.record_redis_hit()
+            duration = time.time() - start_time
+            metrics.record_request("/api/marker_rows", duration)
+            return jsonify(cached)
+
+    metrics.record_redis_miss()
+
+    rows: List[Dict[str, Any]] = []
+
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            resp = supabase.rpc(
+                "rpc_marker_rows",
+                {
+                    "dump_date": dump_date,
+                    "region_param": region if region else None,
+                    "alliance_tag_param": alliance if alliance else None,
+                    "player_name_param": player if player else None,
+                },
+            ).execute()
+            rows = resp.data or []
+            logger.info("Fetched %d marker rows from Supabase RPC (dump_date=%s)", len(rows), dump_date)
+            if len(rows) == 1000:
+                logger.warning(
+                    "rpc_marker_rows returned exactly 1000 rows (likely truncated). "
+                    "Falling back to get_all_villages() for complete row set."
+                )
+                rows = get_all_villages()
+
+        except Exception as e:
+            logger.warning("Supabase RPC failed for /api/marker_rows: %s, falling back", e)
+            rows = get_all_villages()
+    else:
+        rows = get_all_villages()
+
+    # If we fell back to get_all_villages(), apply filters locally to match marker behavior
+    if rows and (region or alliance or player):
+        if region:
+            rows = [
+                v for v in rows
+                if (v.get("region") or "").strip().lower() == region.lower()
+                or (region.lower() == "none" and not (v.get("region") or "").strip())
+            ]
+        if alliance:
+            rows = [
+                v for v in rows
+                if (v.get("alliance_tag") or "").strip().lower() == alliance.lower()
+                or (alliance.lower() == "natars" and not (v.get("alliance_tag") or "").strip())
+            ]
+        if player:
+            rows = [
+                v for v in rows
+                if (v.get("player_name") or "").strip().lower() == player.lower()
+            ]
+
+    # Ensure common fields exist (your code uses this elsewhere)
+    try:
+        _inject_common_fields(rows)
+    except Exception:
+        pass
+
+    # Cache write (only if not bypassed)
+    if not bypass_cache:
+        cache_set_gzip_json(cache_key, rows, ttl=3600)
+
+    duration = time.time() - start_time
+    metrics.record_request("/api/marker_rows", duration)
+    return jsonify(rows)
+
+
+@app.route("/api/villages")
+@limiter.limit(config.RATE_LIMIT_DEFAULT)
+@api_error_handler
+def api_villages_latest_query():
+    """
+    Frontend compatibility endpoint.
+    TradeRoutes.vue calls /api/villages?latest=1&no_cache=1.
+    We return the same raw rows as /api/marker_rows (JSON array).
+    """
+    return api_marker_rows()
+
+
+@app.route("/api/villages/latest")
+@limiter.limit(config.RATE_LIMIT_DEFAULT)
+@api_error_handler
+def api_villages_latest():
+    """
+    Frontend compatibility endpoint.
+    TradeRoutes.vue calls /api/villages/latest?no_cache=1.
+    We return the same raw rows as /api/marker_rows (JSON array).
+    """
+    return api_marker_rows()
+
 
 @app.route("/api/region", methods=["GET"])
 @api_error_handler
@@ -1014,19 +1510,54 @@ def api_region_list():
         JSON response with list of unique region names
     """
     start_time = time.time()
-    villages = get_all_villages()
-    seen = set()
-
-    for v in villages:
-        reg = (v.get("region") or "").strip()
-        if reg == "":
-            reg = "None"
-        seen.add(reg)
-
-    regions = sorted(seen)
+    dump_date = get_latest_dump_date()
+    cache_key = f"regions:{dump_date}"
+    
+    # Try Redis cache first
+    cached_regions = cache_get_json(cache_key)
+    if cached_regions:
+        metrics.record_redis_hit()
+        duration = time.time() - start_time
+        metrics.record_request('/api/region', duration)
+        return jsonify(cached_regions)
+    
+    metrics.record_redis_miss()
+    
+    # Query Supabase with RPC
+    regions: List[str] = []
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            resp = supabase.rpc("rpc_region_list", {"dump_date": dump_date}).execute()
+            regions = [r.get("region") or r for r in (resp.data or [])]
+            logger.info(f"Fetched {len(regions)} regions from Supabase RPC")
+        except Exception as e:
+            logger.warning(f"Supabase RPC failed for regions: {e}, falling back")
+            # Fallback: get all villages and extract regions
+            villages = get_all_villages()
+            seen = set()
+            for v in villages:
+                reg = (v.get("region") or "").strip()
+                if reg == "":
+                    reg = "None"
+                seen.add(reg)
+            regions = sorted(seen)
+    else:
+        # Fallback: get all villages and extract regions
+        villages = get_all_villages()
+        seen = set()
+        for v in villages:
+            reg = (v.get("region") or "").strip()
+            if reg == "":
+                reg = "None"
+            seen.add(reg)
+        regions = sorted(seen)
+    
+    # Cache the result
+    cache_set_json(cache_key, regions, ttl=3600)
+    
     duration = time.time() - start_time
     metrics.record_request('/api/region', duration)
-    # Return array directly for backward compatibility with frontend
     return jsonify(regions)
 
 # ——— List all alliance tags (simple array) ———
@@ -1043,16 +1574,52 @@ def api_alliance_tags():
         JSON response with array of alliance tag strings
     """
     start_time = time.time()
-    villages = get_all_villages()
-    alliance_tags = set()
+    dump_date = get_latest_dump_date()
+    cache_key = f"alliance_tags:{dump_date}"
     
-    for village in villages:
-        alliance_tag = (village.get('alliance_tag') or '').strip()
-        if not alliance_tag:
-            alliance_tag = "Natars"
-        alliance_tags.add(alliance_tag)
+    # Try Redis cache first
+    cached_tags = cache_get_json(cache_key)
+    if cached_tags:
+        metrics.record_redis_hit()
+        duration = time.time() - start_time
+        metrics.record_request('/api/alliance', duration)
+        return jsonify(cached_tags)
     
-    sorted_tags = sorted(alliance_tags)
+    metrics.record_redis_miss()
+    
+    # Query Supabase with RPC
+    sorted_tags: List[str] = []
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            resp = supabase.rpc("rpc_alliance_tag_list", {"dump_date": dump_date}).execute()
+            sorted_tags = [t.get("alliance_tag") or t for t in (resp.data or [])]
+            logger.info(f"Fetched {len(sorted_tags)} alliance tags from Supabase RPC")
+        except Exception as e:
+            logger.warning(f"Supabase RPC failed for alliance tags: {e}, falling back")
+            # Fallback: get all villages and extract alliance tags
+            villages = get_all_villages()
+            alliance_tags = set()
+            for village in villages:
+                alliance_tag = (village.get('alliance_tag') or '').strip()
+                if not alliance_tag:
+                    alliance_tag = "Natars"
+                alliance_tags.add(alliance_tag)
+            sorted_tags = sorted(alliance_tags)
+    else:
+        # Fallback: get all villages and extract alliance tags
+        villages = get_all_villages()
+        alliance_tags = set()
+        for village in villages:
+            alliance_tag = (village.get('alliance_tag') or '').strip()
+            if not alliance_tag:
+                alliance_tag = "Natars"
+            alliance_tags.add(alliance_tag)
+        sorted_tags = sorted(alliance_tags)
+    
+    # Cache the result
+    cache_set_json(cache_key, sorted_tags, ttl=3600)
+    
     duration = time.time() - start_time
     metrics.record_request('/api/alliance', duration)
     return jsonify(sorted_tags)
@@ -1063,7 +1630,38 @@ def api_alliance_tags():
 def api_alliance_list():
     """Return a list of all alliances with their member counts."""
     start_time = time.time()
-    villages = get_all_villages()
+    dump_date = get_latest_dump_date()
+    cache_key = f"alliances:{dump_date}"
+    
+    # Try Redis cache first
+    cached_data = cache_get_json(cache_key)
+    if cached_data:
+        metrics.record_redis_hit()
+        duration = time.time() - start_time
+        metrics.record_request('/api/alliances', duration)
+        return jsonify(cached_data)
+    
+    metrics.record_redis_miss()
+    
+    # Query Supabase
+    villages: List[Dict[str, Any]] = []
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            query = supabase.table("villages").select("*").eq("dump_date", dump_date)
+            page_size, offset = 1000, 0
+            while True:
+                chunk = query.range(offset, offset + page_size - 1).execute().data or []
+                villages.extend(chunk)
+                if len(chunk) < page_size:
+                    break
+                offset += page_size
+        except Exception as e:
+            logger.warning(f"Supabase query failed for alliances: {e}, falling back")
+            villages = get_all_villages()
+    else:
+        villages = get_all_villages()
+    
     alliances = {}
     
     for village in villages:
@@ -1107,13 +1705,18 @@ def api_alliance_list():
     # Sort alliances by total population (descending)
     sorted_alliances = sorted(alliances.values(), key=lambda a: a['total_population'], reverse=True)
     
+    result = {
+        'alliances': sorted_alliances,
+        'total': len(alliances)
+    }
+    
+    # Cache the result
+    cache_set_json(cache_key, result, ttl=3600)
+    
     duration = time.time() - start_time
     metrics.record_request('/api/alliances', duration)
     
-    return jsonify({
-        'alliances': sorted_alliances,
-        'total': len(alliances)
-    })
+    return jsonify(result)
 
 @app.route("/api/region/<region_name>/map")
 @api_error_handler
@@ -1129,19 +1732,59 @@ def api_region_map(region_name):
     """
     start_time = time.time()
     region_name = validate_string_param(region_name, 'region_name')
-    rows = get_all_villages()
+    dump_date = get_latest_dump_date()
+    cache_key = f"region_map:{dump_date}:{region_name}"
     
-    # Handle "None" region specially - match empty/whitespace regions
-    if region_name.lower() == "none":
-        filt = [r for r in rows if not (r.get("region") or "").strip()]
+    # Try Redis cache first
+    cached_data = cache_get_gzip_json(cache_key)
+    if cached_data:
+        metrics.record_redis_hit()
+        duration = time.time() - start_time
+        metrics.record_request('/api/region/<region_name>/map', duration)
+        return jsonify(cached_data)
+    
+    metrics.record_redis_miss()
+    
+    # Query Supabase with RPC
+    rows: List[Dict[str, Any]] = []
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            resp = supabase.rpc("rpc_marker_rows", {
+                "dump_date": dump_date,
+                "region_param": region_name,
+                "alliance_tag_param": None,
+                "player_name_param": None
+            }).execute()
+            rows = resp.data or []
+            logger.info(f"Fetched {len(rows)} villages from Supabase RPC for region map")
+        except Exception as e:
+            logger.warning(f"Supabase RPC failed for region map: {e}, falling back")
+            rows = get_all_villages()
+            # Handle "None" region specially - match empty/whitespace regions
+            if region_name.lower() == "none":
+                rows = [r for r in rows if not (r.get("region") or "").strip()]
+            else:
+                rows = [r for r in rows if (r.get("region") or "").strip().lower() == region_name.lower()]
     else:
-        filt = [r for r in rows if (r.get("region") or "").strip().lower() == region_name.lower()]
+        rows = get_all_villages()
+        # Handle "None" region specially - match empty/whitespace regions
+        if region_name.lower() == "none":
+            rows = [r for r in rows if not (r.get("region") or "").strip()]
+        else:
+            rows = [r for r in rows if (r.get("region") or "").strip().lower() == region_name.lower()]
     
-    if not filt:
+    if not rows:
         raise APIError(f"No data found for region: {region_name}", 404)
+    
+    markers_data = generate_svg_markers(rows)
+    
+    # Cache the result
+    cache_set_gzip_json(cache_key, markers_data, ttl=3600)
+    
     duration = time.time() - start_time
     metrics.record_request('/api/region/<region_name>/map', duration)
-    return jsonify(generate_svg_markers(filt))
+    return jsonify(markers_data)
 
 @app.route("/api/region/<region_name>/villages")
 @api_error_handler
@@ -1161,33 +1804,84 @@ def api_region_villages(region_name):
     """
     start_time = time.time()
     region_name = validate_string_param(region_name, 'region_name')
-    rows = get_all_villages()
+    dump_date = get_latest_dump_date()
     
-    # Handle "None" region specially - match empty/whitespace regions
-    if region_name.lower() == "none":
-        vs = [r for r in rows if not (r.get("region") or "").strip()]
-    else:
-        vs = [r for r in rows if (r.get("region") or "").strip().lower() == region_name.lower()]
-    
-    if not vs:
-        raise APIError(f"No data for region {region_name}", 404)
-    
-    _inject_common_fields(vs)
-    
-    # Check if pagination is explicitly requested
+    # Check pagination params
     has_page = request.args.get('page') is not None
     has_per_page = request.args.get('per_page') is not None
+    page = request.args.get('page', 1, type=int) if has_page else 1
+    per_page = request.args.get('per_page', 1000, type=int) if has_per_page else 1000
+    
+    # Build cache key
+    cache_key = f"region_villages:{dump_date}:{region_name}"
+    if has_page or has_per_page:
+        cache_key += f":page={page}:per_page={per_page}"
+    
+    # Try Redis cache first (only for non-paginated or first page)
+    if not (has_page and page > 1):
+        cached_data = cache_get_json(cache_key)
+        if cached_data:
+            metrics.record_redis_hit()
+            duration = time.time() - start_time
+            metrics.record_request('/api/region/<region_name>/villages', duration)
+            return jsonify(cached_data)
+    
+    metrics.record_redis_miss()
+    
+    # Query Supabase with RPC
+    rows: List[Dict[str, Any]] = []
+    total_count = 0
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            # Get paginated villages
+            resp = supabase.rpc("rpc_region_villages", {
+                "dump_date_param": dump_date,
+                "region_name": region_name,
+                "limit_val": per_page,
+                "offset_val": (page - 1) * per_page
+            }).execute()
+            rows = resp.data or []
+            
+            # Get total count for pagination
+            if has_page or has_per_page:
+                count_resp = supabase.rpc("rpc_region_village_count", {
+                    "dump_date": dump_date,
+                    "region_name": region_name
+                }).execute()
+                if count_resp.data:
+                    total_count = count_resp.data[0] if isinstance(count_resp.data[0], int) else count_resp.data[0].get("rpc_region_village_count", 0)
+            
+            logger.info(f"Fetched {len(rows)} villages from Supabase RPC for region villages")
+        except Exception as e:
+            logger.warning(f"Supabase RPC failed for region villages: {e}, falling back")
+            rows = get_all_villages()
+            # Handle "None" region specially - match empty/whitespace regions
+            if region_name.lower() == "none":
+                rows = [r for r in rows if not (r.get("region") or "").strip()]
+            else:
+                rows = [r for r in rows if (r.get("region") or "").strip().lower() == region_name.lower()]
+            total_count = len(rows)
+    else:
+        rows = get_all_villages()
+        # Handle "None" region specially - match empty/whitespace regions
+        if region_name.lower() == "none":
+            rows = [r for r in rows if not (r.get("region") or "").strip()]
+        else:
+            rows = [r for r in rows if (r.get("region") or "").strip().lower() == region_name.lower()]
+        total_count = len(rows)
+    
+    if not rows:
+        raise APIError(f"No data for region {region_name}", 404)
+    
+    _inject_common_fields(rows)
     
     # If pagination is explicitly requested, use new format
     if has_page or has_per_page:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 1000, type=int)
         page, per_page = validate_pagination_params(page, per_page, max_per_page=1000)
+        result = paginate(rows, page, per_page)
         
-        result = paginate(vs, page, per_page)
-        duration = time.time() - start_time
-        metrics.record_request('/api/region/<region_name>/villages', duration)
-        return jsonify(success_response({
+        response_data = success_response({
             'region': region_name,
             'villages': result['items'],
             'pagination': {
@@ -1198,12 +1892,25 @@ def api_region_villages(region_name):
                 'has_next': result['has_next'],
                 'has_prev': result['has_prev']
             }
-        }, f"Villages for region {region_name} retrieved")[0])
+        }, f"Villages for region {region_name} retrieved")[0]
+        
+        # Cache only first page
+        if page == 1:
+            cache_set_json(cache_key, response_data, ttl=3600)
+        
+        duration = time.time() - start_time
+        metrics.record_request('/api/region/<region_name>/villages', duration)
+        return jsonify(response_data)
     
     # Otherwise, return backward compatible format (old format)
+    response_data = {'region': region_name, 'villages': rows}
+    
+    # Cache the result
+    cache_set_json(cache_key, response_data, ttl=3600)
+    
     duration = time.time() - start_time
     metrics.record_request('/api/region/<region_name>/villages', duration)
-    return jsonify(region=region_name, villages=vs)
+    return jsonify(response_data)
 
 @app.route("/api/alliance/<alliance_tag>/map")
 @api_error_handler
@@ -1220,16 +1927,57 @@ def api_alliance_map(alliance_tag):
     start_time = time.time()
     alliance_tag = validate_string_param(alliance_tag, 'alliance_tag')
     lower = alliance_tag.lower()
-    rows  = get_all_villages()
-    if lower == "natars":
-        filt = [r for r in rows if not r.get("alliance_tag")]
+    dump_date = get_latest_dump_date()
+    cache_key = f"alliance_map:{dump_date}:{alliance_tag}"
+    
+    # Try Redis cache first
+    cached_data = cache_get_gzip_json(cache_key)
+    if cached_data:
+        metrics.record_redis_hit()
+        duration = time.time() - start_time
+        metrics.record_request('/api/alliance/<alliance_tag>/map', duration)
+        return jsonify(cached_data)
+    
+    metrics.record_redis_miss()
+    
+    # Query Supabase with RPC
+    rows: List[Dict[str, Any]] = []
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            resp = supabase.rpc("rpc_marker_rows", {
+                "dump_date": dump_date,
+                "region_param": None,
+                "alliance_tag_param": alliance_tag,
+                "player_name_param": None
+            }).execute()
+            rows = resp.data or []
+            logger.info(f"Fetched {len(rows)} villages from Supabase RPC for alliance map")
+        except Exception as e:
+            logger.warning(f"Supabase RPC failed for alliance map: {e}, falling back")
+            rows = get_all_villages()
+            if lower == "natars":
+                rows = [r for r in rows if not (r.get("alliance_tag") or "").strip()]
+            else:
+                rows = [r for r in rows if (r.get("alliance_tag") or "").strip().lower() == lower]
     else:
-        filt = [r for r in rows if (r.get("alliance_tag") or "").strip().lower() == lower]
-    if not filt:
+        rows = get_all_villages()
+        if lower == "natars":
+            rows = [r for r in rows if not (r.get("alliance_tag") or "").strip()]
+        else:
+            rows = [r for r in rows if (r.get("alliance_tag") or "").strip().lower() == lower]
+    
+    if not rows:
         raise APIError(f"No data found for alliance: {alliance_tag}", 404)
+    
+    markers_data = generate_svg_markers(rows)
+    
+    # Cache the result
+    cache_set_gzip_json(cache_key, markers_data, ttl=3600)
+    
     duration = time.time() - start_time
     metrics.record_request('/api/alliance/<alliance_tag>/map', duration)
-    return jsonify(generate_svg_markers(filt))
+    return jsonify(markers_data)
 
 @app.route("/api/alliance/<alliance_tag>/villages")
 @api_error_handler
@@ -1250,31 +1998,93 @@ def api_alliance_villages(alliance_tag):
     start_time = time.time()
     alliance_tag = validate_string_param(alliance_tag, 'alliance_tag')
     lower = alliance_tag.lower()
-    rows  = get_all_villages()
-    if lower == "natars":
-        # Natars = villages with no alliance_tag or empty/whitespace-only tag
-        filt = [r for r in rows if not (r.get("alliance_tag") or "").strip()]
-    else:
-        # Normalize alliance_tag by stripping whitespace before comparison (consistent with /api/alliance)
-        filt = [r for r in rows if (r.get("alliance_tag") or "").strip().lower() == lower]
+    dump_date = get_latest_dump_date()
     
-    # Return empty array instead of error - frontend can handle empty results
-    _inject_common_fields(filt)
-    
-    # Check if pagination is explicitly requested
+    # Check pagination params
     has_page = request.args.get('page') is not None
     has_per_page = request.args.get('per_page') is not None
+    page = request.args.get('page', 1, type=int) if has_page else 1
+    per_page = request.args.get('per_page', 1000, type=int) if has_per_page else 1000
+    
+    # Build cache key
+    cache_key = f"alliance_villages:{dump_date}:{alliance_tag}"
+    if has_page or has_per_page:
+        cache_key += f":page={page}:per_page={per_page}"
+    
+    # Try Redis cache first (only for non-paginated or first page)
+    if not (has_page and page > 1):
+        cached_data = cache_get_json(cache_key)
+        if cached_data:
+            metrics.record_redis_hit()
+            duration = time.time() - start_time
+            metrics.record_request('/api/alliance/<alliance_tag>/villages', duration)
+            return jsonify(cached_data)
+    
+    metrics.record_redis_miss()
+    
+    # Query Supabase with RPC
+    rows: List[Dict[str, Any]] = []
+    total_count = 0
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            # Get paginated villages
+            resp = supabase.rpc("rpc_alliance_villages", {
+                "dump_date_param": dump_date,
+                "alliance_tag_param": alliance_tag,
+                "limit_val": per_page,
+                "offset_val": (page - 1) * per_page
+            }).execute()
+            rows = resp.data or []
+            
+            # Get total count for pagination
+            if has_page or has_per_page:
+                count_resp = supabase.rpc("rpc_alliance_village_count", {
+                    "dump_date": dump_date,
+                    "alliance_tag": alliance_tag
+                }).execute()
+                if count_resp.data:
+                    total_count = count_resp.data[0] if isinstance(count_resp.data[0], int) else count_resp.data[0].get("rpc_alliance_village_count", 0)
+            
+            logger.info(f"Fetched {len(rows)} villages from Supabase RPC for alliance villages")
+        except Exception as e:
+            logger.warning(f"Supabase RPC failed for alliance villages: {e}, falling back")
+            rows = get_all_villages()
+            if lower == "natars":
+                rows = [r for r in rows if not (r.get("alliance_tag") or "").strip()]
+            else:
+                rows = [r for r in rows if (r.get("alliance_tag") or "").strip().lower() == lower]
+            total_count = len(rows)
+    else:
+        rows = get_all_villages()
+        if lower == "natars":
+            rows = [r for r in rows if not (r.get("alliance_tag") or "").strip()]
+        else:
+            rows = [r for r in rows if (r.get("alliance_tag") or "").strip().lower() == lower]
+        total_count = len(rows)
+    
+    # Return empty array instead of error - frontend can handle empty results
+    _inject_common_fields(rows)
     
     # If pagination is explicitly requested, use new format
     if has_page or has_per_page:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 1000, type=int)
         page, per_page = validate_pagination_params(page, per_page, max_per_page=1000)
+        # Use total_count from RPC if available, otherwise use paginate function
+        if total_count > 0:
+            total_pages = (total_count + per_page - 1) // per_page
+            result = {
+                'items': rows,
+                'page': page,
+                'per_page': per_page,
+                'total': total_count,
+                'total_pages': total_pages,
+                'has_next': page < total_pages,
+                'has_prev': page > 1
+            }
+        else:
+            result = paginate(rows, page, per_page)
         
-        result = paginate(filt, page, per_page)
-        duration = time.time() - start_time
-        metrics.record_request('/api/alliance/<alliance_tag>/villages', duration)
-        return jsonify(success_response({
+        response_data = success_response({
             'alliance': alliance_tag,
             'villages': result['items'],
             'pagination': {
@@ -1285,12 +2095,25 @@ def api_alliance_villages(alliance_tag):
                 'has_next': result['has_next'],
                 'has_prev': result['has_prev']
             }
-        }, f"Villages for alliance {alliance_tag} retrieved")[0])
+        }, f"Villages for alliance {alliance_tag} retrieved")[0]
+        
+        # Cache only first page
+        if page == 1:
+            cache_set_json(cache_key, response_data, ttl=3600)
+        
+        duration = time.time() - start_time
+        metrics.record_request('/api/alliance/<alliance_tag>/villages', duration)
+        return jsonify(response_data)
     
     # Otherwise, return backward compatible format (old format)
+    response_data = {'alliance': alliance_tag, 'villages': rows}
+    
+    # Cache the result
+    cache_set_json(cache_key, response_data, ttl=3600)
+    
     duration = time.time() - start_time
     metrics.record_request('/api/alliance/<alliance_tag>/villages', duration)
-    return jsonify(alliance=alliance_tag, villages=filt)
+    return jsonify(response_data)
 
 @app.route("/api/player/<player_name>/map")
 @api_error_handler
@@ -1306,13 +2129,51 @@ def api_player_map(player_name):
     """
     start_time = time.time()
     player_name = validate_string_param(player_name, 'player_name')
-    rows = get_all_villages()
-    filt = [r for r in rows if r.get("player_name","").lower() == player_name.lower()]
-    if not filt:
+    dump_date = get_latest_dump_date()
+    cache_key = f"player_map:{dump_date}:{player_name.strip().lower()}"
+    
+    # Try Redis cache first
+    cached_data = cache_get_gzip_json(cache_key)
+    if cached_data:
+        metrics.record_redis_hit()
+        duration = time.time() - start_time
+        metrics.record_request('/api/player/<player_name>/map', duration)
+        return jsonify(cached_data)
+    
+    metrics.record_redis_miss()
+    
+    # Query Supabase with RPC
+    rows: List[Dict[str, Any]] = []
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            resp = supabase.rpc("rpc_marker_rows", {
+                "dump_date": dump_date,
+                "region_param": None,
+                "alliance_tag_param": None,
+                "player_name_param": player_name
+            }).execute()
+            rows = resp.data or []
+            logger.info(f"Fetched {len(rows)} villages from Supabase RPC for player map")
+        except Exception as e:
+            logger.warning(f"Supabase RPC failed for player map: {e}, falling back")
+            rows = get_all_villages()
+            rows = [r for r in rows if r.get("player_name","").lower() == player_name.lower()]
+    else:
+        rows = get_all_villages()
+        rows = [r for r in rows if r.get("player_name","").lower() == player_name.lower()]
+    
+    if not rows:
         raise APIError(f"No data found for player: {player_name}", 404)
+    
+    markers_data = generate_svg_markers(rows)
+    
+    # Cache the result (shorter TTL for player-specific data)
+    cache_set_gzip_json(cache_key, markers_data, ttl=1800)
+    
     duration = time.time() - start_time
     metrics.record_request('/api/player/<player_name>/map', duration)
-    return jsonify(generate_svg_markers(filt))
+    return jsonify(markers_data)
 
 @app.route("/api/player/<player_name>/villages")
 @api_error_handler
@@ -1332,26 +2193,74 @@ def api_player_villages(player_name):
     """
     start_time = time.time()
     player_name = validate_string_param(player_name, 'player_name')
-    vs = [r for r in get_all_villages() if r.get("player_name","").lower() == player_name.lower()]
+    dump_date = get_latest_dump_date()
+    
+    # Check pagination params
+    has_page = request.args.get('page') is not None
+    has_per_page = request.args.get('per_page') is not None
+    page = request.args.get('page', 1, type=int) if has_page else 1
+    per_page = request.args.get('per_page', 1000, type=int) if has_per_page else 1000
+    
+    # Build cache key
+    cache_key = f"player_villages:{dump_date}:{player_name}"
+    if has_page or has_per_page:
+        cache_key += f":page={page}:per_page={per_page}"
+    
+    # Try Redis cache first (only for non-paginated or first page)
+    if not (has_page and page > 1):
+        cached_data = cache_get_json(cache_key)
+        if cached_data:
+            metrics.record_redis_hit()
+            duration = time.time() - start_time
+            metrics.record_request('/api/player/<player_name>/villages', duration)
+            return jsonify(cached_data)
+    
+    metrics.record_redis_miss()
+    
+    # Query Supabase with RPC
+    vs: List[Dict[str, Any]] = []
+    total_count = 0
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            # Get paginated villages
+            resp = supabase.rpc("rpc_player_villages", {
+                "dump_date_param": dump_date,
+                "player_name_param": player_name,
+                "limit_val": per_page,
+                "offset_val": (page - 1) * per_page
+            }).execute()
+            vs = resp.data or []
+            
+            # Get total count for pagination
+            if has_page or has_per_page:
+                count_resp = supabase.rpc("rpc_player_village_count", {
+                    "dump_date": dump_date,
+                    "player_name": player_name
+                }).execute()
+                if count_resp.data:
+                    total_count = count_resp.data[0] if isinstance(count_resp.data[0], int) else count_resp.data[0].get("rpc_player_village_count", 0)
+            
+            logger.info(f"Fetched {len(vs)} villages from Supabase RPC for player villages")
+        except Exception as e:
+            logger.warning(f"Supabase RPC failed for player villages: {e}, falling back")
+            vs = [r for r in get_all_villages() if r.get("player_name","").lower() == player_name.lower()]
+            total_count = len(vs)
+    else:
+        vs = [r for r in get_all_villages() if r.get("player_name","").lower() == player_name.lower()]
+        total_count = len(vs)
+    
     if not vs:
         raise APIError(f"No data for player {player_name}", 404)
     
     _inject_common_fields(vs)
     
-    # Check if pagination is explicitly requested
-    has_page = request.args.get('page') is not None
-    has_per_page = request.args.get('per_page') is not None
-    
     # If pagination is explicitly requested, use new format
     if has_page or has_per_page:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 1000, type=int)
         page, per_page = validate_pagination_params(page, per_page, max_per_page=1000)
-        
         result = paginate(vs, page, per_page)
-        duration = time.time() - start_time
-        metrics.record_request('/api/player/<player_name>/villages', duration)
-        return jsonify(success_response({
+        
+        response_data = success_response({
             'player': player_name,
             'villages': result['items'],
             'pagination': {
@@ -1362,84 +2271,115 @@ def api_player_villages(player_name):
                 'has_next': result['has_next'],
                 'has_prev': result['has_prev']
             }
-        }, f"Villages for player {player_name} retrieved")[0])
+        }, f"Villages for player {player_name} retrieved")[0]
+        
+        # Cache only first page (shorter TTL for player-specific data)
+        if page == 1:
+            cache_set_json(cache_key, response_data, ttl=1800)
+        
+        duration = time.time() - start_time
+        metrics.record_request('/api/player/<player_name>/villages', duration)
+        return jsonify(response_data)
     
     # Otherwise, return backward compatible format (old format)
+    response_data = {'player': player_name, 'villages': vs}
+    
+    # Cache the result (shorter TTL for player-specific data)
+    cache_set_json(cache_key, response_data, ttl=1800)
+    
     duration = time.time() - start_time
     metrics.record_request('/api/player/<player_name>/villages', duration)
-    return jsonify(player=player_name, villages=vs)
+    return jsonify(response_data)
 
 @app.route("/api/player/<player_name>/history")
 @api_error_handler
 def api_player_history(player_name: str):
-    """
-    Return time-series for a player's total villages & population per dump_date.
-    If Supabase is unreachable or errors, degrade gracefully without touching the network.
-    
-    Args:
-        player_name: Name of the player
-        
-    Returns:
-        JSON response with historical data (villages and population over time)
-    """
     start_time = time.time()
     player_name = validate_string_param(player_name, 'player_name')
-    # Try Supabase only if reachable
-    if supabase_reachable(1.0):
-        try:
-            resp = (supabase.table("villages")
-                            .select("dump_date,population,player_name")
-                            .ilike("player_name", player_name)
-                            .execute())
-            vs = resp.data or []
-            stats: Dict[str, Dict[str, int]] = {}
-            for r in vs:
-                d = r["dump_date"]
-                stats.setdefault(d, {"villages": 0, "population": 0})
-                stats[d]["villages"] += 1
-                stats[d]["population"] += int(r.get("population") or 0)
-            history = [{"date": d,
-                        "villages": stats[d]["villages"],
-                        "population": stats[d]["population"]}
-                       for d in sorted(stats)]
+
+    dump_date = get_latest_dump_date()
+    # normalize cache key so case/spacing doesn't fragment cache entries
+    cache_key = f"player_history:{dump_date}:{player_name.strip().lower()}"
+
+    # Optional bypass flag (frontend already sends no_cache=1)
+    bypass_cache = request.args.get("no_cache", "0") == "1"
+
+    if not bypass_cache:
+        cached_data = cache_get_json(cache_key)
+        if cached_data:
+            metrics.record_redis_hit()
             duration = time.time() - start_time
             metrics.record_request('/api/player/<player_name>/history', duration)
-            return jsonify(success_response({
-                'player': player_name,
-                'history': history
-            }, "Player history retrieved successfully")[0])
+            return jsonify(success_response(cached_data, "Player history (cached)")[0])
+
+    metrics.record_redis_miss()
+
+    history: List[Dict[str, Any]] = []
+
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            # Try exact name first
+            resp = supabase.rpc("rpc_player_history", {"player_name_param": player_name}).execute()
+            history = resp.data or []
+
+            # If RPC is case-sensitive and returned nothing, try lower-case once
+            if not history and player_name.lower() != player_name:
+                resp2 = supabase.rpc("rpc_player_history", {"player_name": player_name.lower()}).execute()
+                history = resp2.data or []
+
+            logger.info(f"Fetched {len(history)} history entries from Supabase RPC for player")
         except Exception as e:
-            logger.error("Supabase history lookup failed for %s: %s", player_name, e)
-
-    # ⬇️ LOCAL, non-network fallback — use in-memory caches only
-    player_lower = player_name.lower()
-    rows: List[Dict[str, Any]] = []
-
-    if _cached_rows:
-        rows = _cached_rows
-    elif _cached_sql:
-        rows = [sql_row_to_dict(r) for r in _cached_sql]
+            logger.warning(f"Supabase RPC failed for player history: {e}, using fallback history")
+            history = get_fallback_history(player_name)
     else:
-        # last resort; may try network but has short timeout & cache
-        rows = [sql_row_to_dict(r) for r in fetch_sql_data()]
+        # Supabase down: still return something useful
+        history = get_fallback_history(player_name)
 
-    rows = [r for r in rows if (r.get("player_name") or "").lower() == player_lower]
-    if rows:
-        total_pop = sum(int(r.get("population") or 0) for r in rows)
-        today = date.today().isoformat()
-        history = [{"date": today, "villages": len(rows), "population": total_pop}]
-    else:
-        history = []
+    response_data = {'player': player_name, 'history': history}
+    cache_set_json(cache_key, response_data, ttl=3600)
 
     duration = time.time() - start_time
     metrics.record_request('/api/player/<player_name>/history', duration)
-    return jsonify(success_response({
-        'player': player_name,
-        'history': history
-    }, "Player history retrieved successfully")[0])
+    return jsonify(success_response(response_data, "Player history retrieved successfully")[0])
+
+
+def get_fallback_history(player_name: str) -> List[Dict]:
+    """Fallback history when Supabase is not available"""
+    player_lower = player_name.lower()
+    rows: List[Dict[str, Any]] = []
+    
+    cached_rows = supabase_cache_manager.get()
+    if cached_rows:
+        rows = cached_rows
+    else:
+        cached_sql = sql_cache_manager.get()
+        if cached_sql:
+            rows = [sql_row_to_dict(r) for r in cached_sql]
+        else:
+            rows = [sql_row_to_dict(r) for r in fetch_sql_data()]
+    
+    rows = [r for r in rows if (r.get("player_name") or "").lower() == player_lower]
+    if not rows:
+        return []
+    
+    today = date.today().isoformat()
+    total_pop = sum(int(r.get("population") or 0) for r in rows)
+    
+    return [{
+        "date": today,
+        "villages": len(rows),
+        "population": total_pop,
+        "tribes": {},
+        "village_growth": 0,
+        "pop_growth": 0,
+        "pop_growth_rate": 0,
+        "village_growth_rate": 0
+    }]
 
 
 @app.route("/api/players")
+@limiter.limit(config.RATE_LIMIT_DEFAULT)
 @api_error_handler
 def api_players():
     """
@@ -1454,41 +2394,104 @@ def api_players():
         JSON response with paginated list of players sorted by population
     """
     start_time = time.time()
-    rows = get_all_villages()
-    players: Dict[str,Dict[str,Any]] = {}
-    for r in rows:
-        nm = (r.get("player_name") or "").strip()
-        if not nm: continue
-        alliance = r.get("alliance_tag","") or ""
-        pop      = int(r.get("population") or 0)
-        if nm not in players:
-            players[nm] = {
-                "id":int(r.get("player_id") or 0),
-                "name":nm,
-                "alliance":alliance,
-                "villages":0,
-                "population":0
-            }
-        players[nm]["villages"]  += 1
-        players[nm]["population"]+= pop
-
-    # Backward compatibility: return array directly if no pagination params provided
-    # Check if pagination is explicitly requested
+    dump_date = get_latest_dump_date()
+    
+    # Check pagination params
     has_page = request.args.get('page') is not None
     has_per_page = request.args.get('per_page') is not None
     limit = request.args.get("limit", type=int)
+    page = request.args.get('page', 1, type=int) if has_page else 1
+    per_page = request.args.get('per_page', 300, type=int) if has_per_page else 300
     
+    # Build cache key
+    cache_key = f"players:{dump_date}"
+    if has_page or has_per_page:
+        cache_key += f":page={page}:per_page={per_page}"
+    elif limit:
+        cache_key += f":limit={limit}"
+    
+    # Try Redis cache first (only for non-paginated or first page)
+    if not (has_page and page > 1):
+        cached_data = cache_get_json(cache_key)
+        if cached_data:
+            metrics.record_redis_hit()
+            duration = time.time() - start_time
+            metrics.record_request('/api/players', duration)
+            return jsonify(cached_data)
+    
+    metrics.record_redis_miss()
+    
+    # Query Supabase with RPC
+    players_list: List[Dict[str, Any]] = []
+    if supabase_reachable(1.0):
+        try:
+            metrics.record_supabase_query()
+            resp = supabase.rpc("rpc_players", {
+                "dump_date": dump_date,
+                "limit_val": per_page if (has_page or has_per_page) else (limit if limit else 300),
+                "offset_val": (page - 1) * per_page if (has_page or has_per_page) else 0
+            }).execute()
+            players_list = resp.data or []
+            logger.info(f"Fetched {len(players_list)} players from Supabase RPC")
+        except Exception as e:
+            logger.warning(f"Supabase RPC failed for players: {e}, falling back")
+            # Fallback: aggregate in Python
+            rows = get_all_villages()
+            players: Dict[str,Dict[str,Any]] = {}
+            for r in rows:
+                nm = (r.get("player_name") or "").strip()
+                if not nm: continue
+                alliance = r.get("alliance_tag","") or ""
+                pop      = int(r.get("population") or 0)
+                if nm not in players:
+                    players[nm] = {
+                        "id":int(r.get("player_id") or 0),
+                        "name":nm,
+                        "alliance":alliance,
+                        "villages":0,
+                        "population":0
+                    }
+                players[nm]["villages"]  += 1
+                players[nm]["population"]+= pop
+            players_list = sorted(players.values(), key=lambda p: p["population"], reverse=True)
+    else:
+        # Fallback: aggregate in Python
+        rows = get_all_villages()
+        players: Dict[str,Dict[str,Any]] = {}
+        for r in rows:
+            nm = (r.get("player_name") or "").strip()
+            if not nm: continue
+            alliance = r.get("alliance_tag","") or ""
+            pop      = int(r.get("population") or 0)
+            if nm not in players:
+                players[nm] = {
+                    "id":int(r.get("player_id") or 0),
+                    "name":nm,
+                    "alliance":alliance,
+                    "villages":0,
+                    "population":0
+                }
+            players[nm]["villages"]  += 1
+            players[nm]["population"]+= pop
+        players_list = sorted(players.values(), key=lambda p: p["population"], reverse=True)
+
     # If pagination is explicitly requested, use new format
     if has_page or has_per_page:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 300, type=int)
         page, per_page = validate_pagination_params(page, per_page, max_per_page=1000)
         
-        sorted_players = sorted(players.values(), key=lambda p: p["population"], reverse=True)
-        result = paginate(sorted_players, page, per_page)
+        # Players are already sorted by population DESC from RPC
+        # Note: RPC returns limited results, so we may need to handle total count separately
+        # For now, use the returned list length as total (may need adjustment if total count RPC is added)
+        total = len(players_list) if not has_page or page == 1 else per_page * 2  # Estimate
+        response_data = paginated_response(players_list, page, per_page, total)
+        
+        # Cache only first page
+        if page == 1:
+            cache_set_json(cache_key, response_data, ttl=3600)
+        
         duration = time.time() - start_time
         metrics.record_request('/api/players', duration)
-        return jsonify(paginated_response(result['items'], result['page'], result['per_page'], result['total']))
+        return jsonify(response_data)
     
     # Otherwise, return array directly for backward compatibility
     if limit:
@@ -1496,11 +2499,14 @@ def api_players():
     else:
         limit = 300  # Default limit
     
-    sorted_players = sorted(players.values(), key=lambda p: p["population"], reverse=True)
-    top = sorted_players[:limit]
+    # Players are already sorted by population DESC from RPC
+    top = players_list[:limit] if len(players_list) > limit else players_list
+    
+    # Cache the result
+    cache_set_json(cache_key, top, ttl=3600)
+    
     duration = time.time() - start_time
     metrics.record_request('/api/players', duration)
-    # Return array directly (backward compatible with frontend)
     return jsonify(top)
 
 # -------------------- Ingest SQL → Supabase -------------------- #
@@ -1510,6 +2516,7 @@ def ingest_to_supabase():
     
     Fetches SQL data, converts to dictionaries, and upserts into Supabase
     villages table. Uses conflict resolution on village_id and dump_date.
+    Invalidates Redis cache for latest_dump_date to trigger cache refresh.
     """
     rows = fetch_sql_data()
     today = date.today().isoformat()
@@ -1526,6 +2533,18 @@ def ingest_to_supabase():
         code = getattr(res, "status_code", None)
         if code in (200,201):
             logger.info("Ingested %d rows for %s", len(payload), today)
+            
+            # Invalidate latest_dump_date cache to force refresh
+            cache_delete("latest_dump_date")
+            logger.info("Invalidated latest_dump_date cache after ingestion")
+            
+            # Build history for this dump_date
+            try:
+                supabase.rpc("rpc_build_history_for_dump", {"dump_date": today}).execute()
+                logger.info("Built history for dump_date: %s", today)
+            except Exception as e:
+                logger.warning("Failed to build history for dump_date %s: %s", today, e)
+                # Don't fail entire ingestion if history build fails
         else:
             logger.error("Upsert failed: %s", res)
     except Exception as e:

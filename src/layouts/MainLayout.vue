@@ -140,7 +140,7 @@
 <q-item
   clickable
   v-ripple
-  :to="{ name: 'dash-page' }"
+  :to="{ name: 'dashboard-page' }"
   :active="['dash-page', 'dashboard-page'].includes($route.name)"
   active-class="bg-primary text-white"
 >
