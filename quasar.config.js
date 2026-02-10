@@ -10,6 +10,7 @@ module.exports = configure(function () {
     boot: [
       'unocss',   // make sure this is listed *before* axios
       'axios',
+      'auth',
       'apexcharts'
     ],
 

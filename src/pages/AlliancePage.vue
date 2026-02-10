@@ -81,8 +81,22 @@
               </div>
             </div>
 
-            <q-banner v-if="loadHint" class="q-mt-md" dense rounded inline-actions>
+            <q-banner v-if="loadHint" class="q-mt-md" dense rounded :class="backendMode === 'fast' ? 'bg-blue-1 text-blue-9' : 'bg-amber-1 text-amber-9'">
+              <template #avatar>
+                <q-icon :name="backendMode === 'fast' ? 'check_circle' : 'info'" :color="backendMode === 'fast' ? 'blue' : 'amber'" />
+              </template>
               {{ loadHint }}
+              <template #action>
+                <q-chip
+                  v-if="backendMode"
+                  dense
+                  size="sm"
+                  :color="backendMode === 'fast' ? 'blue-2' : 'amber-2'"
+                  :text-color="backendMode === 'fast' ? 'blue-9' : 'amber-9'"
+                  :icon="backendMode === 'fast' ? 'bolt' : 'hourglass_empty'"
+                  :label="backendModeLabel"
+                />
+              </template>
             </q-banner>
           </q-card-section>
 
@@ -279,7 +293,10 @@ async function refreshFast({ silent }) {
     const list = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : null
     if (!list) return false
 
-    const normalized = list.map(normalizeAllianceRow).filter(r => r.alliance.length > 0)
+    const normalized = list
+      .map(normalizeAllianceRow)
+      .filter(r => r.alliance.length > 0)
+      .filter(r => r.alliance.toLowerCase() !== 'natars') // exclude NPC
     rows.value = normalized
     writeCache(cacheKey('alliances:list'), normalized)
 
@@ -313,7 +330,8 @@ function readVillageAllianceTag(v) {
       v?.ally ??
       '') ?? ''
   const tag = String(raw).trim()
-  return tag || 'Natars'
+  if (!tag || tag.toLowerCase() === 'natars') return 'No alliance'
+  return tag
 }
 
 async function buildAlliancePopMap() {
@@ -342,6 +360,7 @@ async function buildAlliancePopMap() {
   const totals = new Map()
   for (const v of villages) {
     const tag = readVillageAllianceTag(v)
+    if (tag === 'No alliance') continue // skip NPC / no-alliance for alliance ranking
     const pop = Number(v?.population || 0)
     totals.set(tag, (totals.get(tag) || 0) + pop)
   }
@@ -619,12 +638,24 @@ onMounted(loadAlliances)
 }
 
 .stat-card {
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.3s ease-in;
   height: 100%;
+  animation: fadeInUp 0.4s ease-out;
 
   &:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

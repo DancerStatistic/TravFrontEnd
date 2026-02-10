@@ -39,22 +39,29 @@ def login_route_handler(config):
     
     data = request.get_json()
     email = data.get("email", "").strip()
-    password = data.get("password", "")
+    password = data.get("password", "").strip()
     
     if not email or not password:
         return jsonify({"status": "error", "message": "Email and password are required"}), 400
     
+    logger.debug(f"Login attempt for email: {email}, AUTH_USERS keys: {list(config.AUTH_USERS.keys())}")
+    
     if email in config.AUTH_USERS:
         user_data = config.AUTH_USERS[email]
-        if user_data.get("password") == password:
+        expected_password = user_data.get("password", "").strip()
+        if expected_password == password:
             user = User(email)
             login_user(user, remember=True)
+            logger.info(f"User {email} logged in successfully")
             return jsonify({
                 "status": "success",
                 "message": "Login successful",
                 "user": {"email": email}
             }), 200
+        else:
+            logger.warning(f"Password mismatch for {email}")
     
+    logger.warning(f"Invalid login attempt for {email}")
     return jsonify({"status": "error", "message": "Invalid credentials"}), 401
 
 
@@ -62,6 +69,14 @@ def logout_route_handler():
     """Handle logout POST request."""
     logout_user()
     return jsonify({"status": "success", "message": "Logged out successfully"}), 200
+
+
+def me_route_handler():
+    """Return current user if authenticated, else 401."""
+    from flask_login import current_user
+    if current_user.is_authenticated:
+        return jsonify({"status": "success", "user": {"email": current_user.id}}), 200
+    return jsonify({"status": "error", "message": "Not authenticated"}), 401
 
 
 def optional_auth(f: Callable) -> Callable:

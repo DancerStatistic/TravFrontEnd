@@ -25,7 +25,7 @@ from cache import (
 # so imports from the backend/ package should work correctly
 try:
     from backend.config import Config
-    from backend.auth import setup_auth, login_route_handler, logout_route_handler, require_auth, optional_auth
+    from backend.auth import setup_auth, login_route_handler, logout_route_handler, me_route_handler, require_auth, optional_auth
     from backend.rate_limit import setup_rate_limiter
     from backend.cache_manager import SQLCacheManager, SupabaseCacheManager
 except ImportError as e:
@@ -36,7 +36,7 @@ except ImportError as e:
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
     from backend.config import Config
-    from backend.auth import setup_auth, login_route_handler, logout_route_handler, require_auth, optional_auth
+    from backend.auth import setup_auth, login_route_handler, logout_route_handler, me_route_handler, require_auth, optional_auth
     from backend.rate_limit import setup_rate_limiter
     from backend.cache_manager import SQLCacheManager, SupabaseCacheManager
 
@@ -80,6 +80,7 @@ config = Config()
 try:
     config.validate()
     logger.info("Configuration loaded successfully")
+    logger.info(f"Authentication configured for {len(config.AUTH_USERS)} user(s): {list(config.AUTH_USERS.keys())}")
 except ValueError as e:
     logger.error(f"Configuration error: {e}")
     raise
@@ -1072,6 +1073,24 @@ def login():
 def logout():
     """Handle user logout."""
     return logout_route_handler()
+
+@app.route("/api/me")
+@api_error_handler
+def me():
+    """Return current user if authenticated."""
+    return me_route_handler()
+
+@app.route("/api/debug/auth-users", methods=["GET"])
+@api_error_handler
+def debug_auth_users():
+    """Debug endpoint to check configured users (remove in production)."""
+    # Only show keys, not passwords
+    users = {email: {"password": "***"} for email in config.AUTH_USERS.keys()}
+    return jsonify({
+        "status": "success",
+        "user_count": len(config.AUTH_USERS),
+        "users": list(config.AUTH_USERS.keys())
+    }), 200
 
 @app.route("/api/cache/redis/markers/clear", methods=["POST"])
 @require_auth

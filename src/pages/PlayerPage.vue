@@ -25,7 +25,8 @@
             <q-card flat bordered class="stat-card">
               <q-card-section class="text-center">
                 <q-icon name="people" size="32px" color="primary" class="q-mb-sm" />
-                <div class="text-h5 q-mb-xs">{{ filteredPlayers.length }}</div>
+                <q-skeleton v-if="loading && !filteredPlayers.length" type="text" width="60px" class="q-mx-auto q-mb-xs" />
+                <div v-else class="text-h5 q-mb-xs">{{ filteredPlayers.length }}</div>
                 <div class="text-caption text-grey-7">Total Players</div>
               </q-card-section>
             </q-card>
@@ -35,7 +36,8 @@
             <q-card flat bordered class="stat-card">
               <q-card-section class="text-center">
                 <q-icon name="location_city" size="32px" color="secondary" class="q-mb-sm" />
-                <div class="text-h5 q-mb-xs">{{ totalVillages }}</div>
+                <q-skeleton v-if="loading && !filteredPlayers.length" type="text" width="80px" class="q-mx-auto q-mb-xs" />
+                <div v-else class="text-h5 q-mb-xs">{{ totalVillages }}</div>
                 <div class="text-caption text-grey-7">Total Villages</div>
               </q-card-section>
             </q-card>
@@ -45,7 +47,8 @@
             <q-card flat bordered class="stat-card">
               <q-card-section class="text-center">
                 <q-icon name="group" size="32px" color="accent" class="q-mb-sm" />
-                <div class="text-h5 q-mb-xs">{{ totalPopulation.toLocaleString() }}</div>
+                <q-skeleton v-if="loading && !filteredPlayers.length" type="text" width="100px" class="q-mx-auto q-mb-xs" />
+                <div v-else class="text-h5 q-mb-xs">{{ totalPopulation.toLocaleString() }}</div>
                 <div class="text-caption text-grey-7">Total Population</div>
               </q-card-section>
             </q-card>
@@ -55,7 +58,8 @@
             <q-card flat bordered class="stat-card">
               <q-card-section class="text-center">
                 <q-icon name="trending_up" size="32px" color="positive" class="q-mb-sm" />
-                <div class="text-h5 q-mb-xs">{{ avgPopulation.toLocaleString() }}</div>
+                <q-skeleton v-if="loading && !filteredPlayers.length" type="text" width="90px" class="q-mx-auto q-mb-xs" />
+                <div v-else class="text-h5 q-mb-xs">{{ avgPopulation.toLocaleString() }}</div>
                 <div class="text-caption text-grey-7">Avg Population</div>
               </q-card-section>
             </q-card>
@@ -364,7 +368,8 @@ function readVillageAllianceTag (v) {
      v?.ally ??
      '') ?? ''
   const tag = String(raw).trim()
-  return tag || 'Natars'
+  if (!tag || tag.toLowerCase() === 'natars') return 'No alliance'
+  return tag
 }
 
 async function buildPlayerAllianceMap () {
@@ -414,8 +419,8 @@ function normalizePlayer (p, allianceMap) {
   // fallback derived from villages
   if (!alliance && name) alliance = String(allianceMap?.[name] || '').trim()
 
-  // normalize for UI consistency
-  if (!alliance) alliance = 'Natars'
+  // normalize for UI consistency (Natars is NPC - treat as "No alliance")
+  if (!alliance) alliance = 'No alliance'
 
   return {
     ...p,
@@ -437,6 +442,7 @@ async function fetchAndBuildPlayers () {
   const normalized = rows
     .map(p => normalizePlayer(p, allianceMap))
     .filter(p => p.name.length > 0)
+    .filter(p => p.alliance !== 'Natars') // exclude NPC
 
   return normalized
 }
@@ -530,12 +536,24 @@ onMounted(loadPlayers)
 }
 
 .stat-card {
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.3s ease-in;
   height: 100%;
+  animation: fadeInUp 0.4s ease-out;
 
   &:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

@@ -151,8 +151,9 @@
 
 <script setup>
 import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { useQuasar } from 'quasar';
+import { useRouter, useRoute } from 'vue-router';
+import { api } from 'boot/axios';
+import { useAppStore } from 'src/stores/app';
 
 const username = ref('');
 const password = ref('');
@@ -162,7 +163,8 @@ const error = ref('');
 const showPassword = ref(false);
 
 const router = useRouter();
-const $q = useQuasar();
+const route = useRoute();
+const appStore = useAppStore();
 
 /* =========================
    NEW: cursor glow layer
@@ -255,23 +257,43 @@ async function onSubmit() {
   loading.value = true;
 
   try {
-    // TODO: Implement actual API login
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    $q.notify({
-      type: 'positive',
-      message: 'Login successful',
-      position: 'top',
+    const response = await api.post('/api/login', {
+      email: username.value.trim(),
+      password: password.value
     });
-
-    router.push('/');
+    
+    console.log('Login response:', response);
+    console.log('Response status:', response.status);
+    console.log('Response data:', response.data);
+    
+    // If we get a 200 response, login was successful
+    if (response.status === 200) {
+      const data = response.data || {};
+      const userEmail = data?.user?.email || username.value.trim();
+      
+      console.log('Login successful, userEmail:', userEmail);
+      
+      // Store auth state (persisted to localStorage)
+      appStore.setAuthenticated(userEmail);
+      
+      // Get redirect path from query, default to home
+      const redirectParam = route.query.redirect;
+      const targetPath = typeof redirectParam === 'string' && redirectParam 
+        ? decodeURIComponent(redirectParam) 
+        : '/';
+      
+      // Simple redirect - use window.location for reliability
+      window.location.href = targetPath;
+      return; // Exit early to prevent any further execution
+    } else {
+      console.error('Unexpected status:', response.status);
+      error.value = 'Invalid credentials. Please try again.';
+      bumpShake();
+    }
   } catch (err) {
-    error.value = 'Invalid credentials. Please try again.';
-    $q.notify({
-      type: 'negative',
-      message: error.value,
-      position: 'top',
-    });
+    console.error('Login error:', err);
+    console.error('Error response:', err?.response);
+    error.value = err?.response?.data?.message || 'Invalid credentials. Please try again.';
     bumpShake();
   } finally {
     loading.value = false;

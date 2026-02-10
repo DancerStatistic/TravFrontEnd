@@ -21,6 +21,11 @@
 
         <q-space />
 
+        <template v-if="appStore.isAuthenticated">
+          <span class="text-caption q-mr-sm">{{ appStore.userEmail }}</span>
+          <q-btn flat dense round icon="logout" aria-label="Logout" @click="logout" />
+        </template>
+
         <!-- Desktop Navigation -->
         <div class="desktop-nav gt-sm">
           <q-btn
@@ -145,7 +150,7 @@
   active-class="bg-primary text-white"
 >
   <q-item-section avatar>
-    <q-icon name="swap_horiz" />
+    <q-icon name="dashboard" />
   </q-item-section>
   <q-item-section>
     <q-item-label>Dashboard</q-item-label>
@@ -202,6 +207,15 @@
 
         <q-separator class="q-mt-md q-mb-md" />
 
+        <q-item v-if="appStore.isAuthenticated" clickable v-ripple @click="logout">
+          <q-item-section avatar>
+            <q-icon name="logout" />
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>Logout</q-item-label>
+          </q-item-section>
+        </q-item>
+
         <q-item-label header class="text-grey-8">
           <div class="text-caption">About</div>
         </q-item-label>
@@ -226,8 +240,23 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAppStore } from 'src/stores/app'
+import { api } from 'boot/axios'
 
 const leftDrawerOpen = ref(false)
+const router = useRouter()
+const appStore = useAppStore()
+
+async function logout() {
+  try {
+    await api.post('/api/logout')
+  } catch {
+    // ignore
+  }
+  appStore.clearAuth()
+  router.push('/login')
+}
 </script>
 
 <style scoped lang="scss">

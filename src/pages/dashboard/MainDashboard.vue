@@ -7,12 +7,43 @@
   
           <div class="row items-center q-gutter-sm dashboard__headerActions">
             <q-toggle v-model="isEditMode" label="Edit layout" dense />
+            <q-select
+              v-model="selectedLayoutId"
+              dense
+              outlined
+              clearable
+              :options="layoutOptions"
+              placeholder="Load layout"
+              emit-value
+              map-options
+              options-dense
+              style="min-width: 160px"
+              @update:model-value="onLoadLayout"
+            >
+              <template #prepend><q-icon name="folder_open" /></template>
+            </q-select>
             <q-btn dense outline icon="save" label="Save" :disable="!isEditMode" @click="saveLayout()" />
+            <q-btn dense outline icon="save_as" label="Save as…" :disable="!isEditMode" @click="showSaveAsDialog = true" />
             <q-btn dense outline icon="restart_alt" label="Reset" @click="resetLayout()" />
           </div>
         </q-toolbar>
       </q-header>
   
+      <q-dialog v-model="showSaveAsDialog" persistent>
+        <q-card style="min-width: 320px">
+          <q-card-section>
+            <div class="text-h6">Save layout</div>
+          </q-card-section>
+          <q-card-section>
+            <q-input v-model="saveAsName" outlined dense label="Layout name" autofocus @keyup.enter="doSaveAs" />
+          </q-card-section>
+          <q-card-actions align="right">
+            <q-btn flat label="Cancel" @click="showSaveAsDialog = false" />
+            <q-btn unelevated color="primary" label="Save" :disable="!saveAsName.trim()" @click="doSaveAs" />
+          </q-card-actions>
+        </q-card>
+      </q-dialog>
+
       <q-page-container>
         <q-page class="dashboard__page">
           <!-- Floating palette -->
@@ -209,7 +240,7 @@
                     <div class="col-12 col-sm-6">
                       <q-input v-model="customizeDraft.title" dense outlined label="Title" />
                     </div>
-  
+
                     <div class="col-12 col-sm-6">
                       <q-select
                         v-model="customizeDraft.sourceKey"
@@ -220,9 +251,37 @@
                         label="Data source"
                         :options="customizeSourceOptions"
                         @update:model-value="onSourceKeyChanged"
-                      />
+                      >
+                        <template #hint>
+                          <div v-if="customizeDraft.sourceKey && SOURCE_REGISTRY[customizeDraft.sourceKey]" class="text-caption text-grey-7 q-mt-xs">
+                            {{ SOURCE_REGISTRY[customizeDraft.sourceKey].label }}
+                          </div>
+                        </template>
+                      </q-select>
                     </div>
                   </div>
+
+                  <!-- Data source description -->
+                  <q-banner v-if="customizeDraft.sourceKey && SOURCE_REGISTRY[customizeDraft.sourceKey]" dense rounded class="bg-blue-1 text-blue-9 q-mt-sm">
+                    <template #avatar>
+                      <q-icon name="info" color="blue" />
+                    </template>
+                    <div class="text-caption">
+                      <strong>{{ SOURCE_REGISTRY[customizeDraft.sourceKey].label }}</strong>
+                      <div v-if="SOURCE_REGISTRY[customizeDraft.sourceKey].needs && SOURCE_REGISTRY[customizeDraft.sourceKey].needs.length" class="q-mt-xs">
+                        <span class="text-grey-7">Required: </span>
+                        <q-chip
+                          v-for="need in SOURCE_REGISTRY[customizeDraft.sourceKey].needs"
+                          :key="need"
+                          dense
+                          size="sm"
+                          color="blue-2"
+                          text-color="blue-9"
+                          :label="need === 'player' ? 'Player' : need === 'playerB' ? 'Player B' : need === 'alliance' ? 'Alliance' : need === 'allianceB' ? 'Alliance B' : need === 'region' ? 'Region' : need === 'topN' ? 'Top N' : need === 'limitVillages' ? 'Village Limit' : need"
+                        />
+                      </div>
+                    </div>
+                  </q-banner>
   
                   <!-- Source parameters (shown only when required) -->
                   <div class="row q-col-gutter-md">
@@ -254,6 +313,24 @@
                         hide-selected
                         input-debounce="0"
                         label="Alliance"
+                        :options="allianceOptionsFiltered"
+                        :loading="optionsLoading.alliances"
+                        @filter="filterAlliances"
+                        emit-value
+                        map-options
+                      />
+                    </div>
+
+                    <div v-if="sourceNeeds(customizeDraft.sourceKey, 'allianceB')" class="col-12 col-sm-6">
+                      <q-select
+                        v-model="customizeDraft.params.allianceTagB"
+                        dense
+                        outlined
+                        use-input
+                        fill-input
+                        hide-selected
+                        input-debounce="0"
+                        label="Alliance B"
                         :options="allianceOptionsFiltered"
                         :loading="optionsLoading.alliances"
                         @filter="filterAlliances"
@@ -323,7 +400,47 @@
                       />
                     </div>
                   </div>
-  
+
+                  <!-- Quick pick buttons for common configurations -->
+                  <div v-if="customizeDraft.sourceKey && (sourceNeeds(customizeDraft.sourceKey, 'player') || sourceNeeds(customizeDraft.sourceKey, 'topN'))" class="q-mt-md">
+                    <div class="text-caption text-grey-7 q-mb-xs">Quick picks:</div>
+                    <div class="row q-gutter-xs">
+                      <q-btn
+                        v-if="sourceNeeds(customizeDraft.sourceKey, 'player') && topPlayerName"
+                        dense
+                        outline
+                        size="sm"
+                        label="Use top player"
+                        icon="star"
+                        @click="customizeDraft.params.playerName = topPlayerName; customizeDraft.title = getTitleForSource(customizeDraft.sourceKey, customizeDraft.params)"
+                      />
+                      <q-btn
+                        v-if="sourceNeeds(customizeDraft.sourceKey, 'topN')"
+                        dense
+                        outline
+                        size="sm"
+                        label="Top 10"
+                        @click="customizeDraft.params.topN = 10; customizeDraft.title = getTitleForSource(customizeDraft.sourceKey, customizeDraft.params)"
+                      />
+                      <q-btn
+                        v-if="sourceNeeds(customizeDraft.sourceKey, 'topN')"
+                        dense
+                        outline
+                        size="sm"
+                        label="Top 20"
+                        @click="customizeDraft.params.topN = 20; customizeDraft.title = getTitleForSource(customizeDraft.sourceKey, customizeDraft.params)"
+                      />
+                      <q-btn
+                        v-if="sourceNeeds(customizeDraft.sourceKey, 'topN')"
+                        dense
+                        outline
+                        size="sm"
+                        label="Top 50"
+                        @click="customizeDraft.params.topN = 50; customizeDraft.title = getTitleForSource(customizeDraft.sourceKey, customizeDraft.params)"
+                      />
+                    </div>
+                  </div>
+
                   <q-separator class="q-my-sm" />
   
                   <div class="row q-col-gutter-md">
@@ -490,6 +607,8 @@
   
   import TextBlock from './widgets/TextBlock.vue'
   import HeaderBlock from './widgets/HeaderBlock.vue'
+  import { filterNpcPlayers, filterNpcAlliances, isNpcAlliance } from 'src/constants/npc'
+  import { useDashboardLayoutsStore } from 'src/stores/dashboard-layouts'
   
   const GRID_COLS = 120
   const DEFAULT_CELL_HEIGHT = 90
@@ -544,9 +663,16 @@
   
   /* widget storage */
   const STORAGE_KEY = 'dashboard:gridstack:v14'
+  const layoutsStore = useDashboardLayoutsStore()
   const gridEl = ref(null)
   const grid = shallowRef(null)
   const isEditMode = ref(false)
+  const showSaveAsDialog = ref(false)
+  const saveAsName = ref('')
+  const selectedLayoutId = ref(layoutsStore.activeLayoutId)
+  const layoutOptions = computed(() =>
+    layoutsStore.layouts.map((l) => ({ label: l.name, value: l.id }))
+  )
   
   /* components map */
   const widgetComponents = {
@@ -593,28 +719,49 @@
     'players.popVsVillages': { label: 'Players: Population vs villages (scatter)', needs: [] },
     'players.popDistribution': { label: 'Players: Population distribution (boxplot)', needs: [] },
     'players.allianceShareTopPlayers': { label: 'Players: Alliance share (top players donut)', needs: ['topN'] },
+    'players.villageDistribution': { label: 'Players: Village count distribution (boxplot)', needs: [] },
+    'players.byAlliancePop': { label: 'Players: Population by alliance (treemap)', needs: ['topN'] },
+    'players.byAllianceCount': { label: 'Players: Count by alliance (donut)', needs: [] },
+    'players.growthRate': { label: 'Players: Growth rate comparison (bar)', needs: ['topN'] },
   
     /* Alliances snapshot (/api/alliances) */
     'alliances.topVillages': { label: 'Alliances: Top villages', needs: ['topN'] },
+    'alliances.topPopulation': { label: 'Alliances: Top population', needs: ['topN'] },
+    'alliances.playerCount': { label: 'Alliances: Player count', needs: ['topN'] },
+    'alliances.popVsVillages': { label: 'Alliances: Population vs villages (scatter)', needs: [] },
+    'alliances.distribution': { label: 'Alliances: Population distribution (boxplot)', needs: [] },
   
     /* Player history (/api/player/<name>/history) */
     'playerHistory.population': { label: 'Player history: Population', needs: ['player'] },
     'playerHistory.villages': { label: 'Player history: Villages', needs: ['player'] },
     'playerHistory.popOHLC': { label: 'Player history: Population OHLC (candles)', needs: ['player'] },
     'playerHistory.envelope': { label: 'Player history: Population envelope (range area)', needs: ['player'] },
+    'playerHistory.growthRate': { label: 'Player history: Growth rate over time', needs: ['player'] },
+    'playerHistory.popAndVillages': { label: 'Player history: Population & villages (mixed)', needs: ['player'] },
   
     /* Alliance villages (/api/alliance/<tag>/villages) */
     'alliance.villagesQuadrants': { label: 'Alliance: Village count by quadrant (stacked)', needs: ['alliance', 'limitVillages'] },
+    'alliance.populationByRegion': { label: 'Alliance: Population by region (stacked)', needs: ['alliance', 'limitVillages'] },
+    'alliance.topPlayers': { label: 'Alliance: Top players (bar)', needs: ['alliance', 'topN'] },
+    'alliance.villageDistribution': { label: 'Alliance: Village distribution (boxplot)', needs: ['alliance', 'limitVillages'] },
   
     /* Region villages (/api/region/<name>/villages) */
     'region.villagesQuadrants': { label: 'Region: Village count by quadrant (stacked)', needs: ['region', 'limitVillages'] },
+    'region.populationByAlliance': { label: 'Region: Population by alliance (stacked)', needs: ['region', 'limitVillages'] },
+    'region.topPlayers': { label: 'Region: Top players (bar)', needs: ['region', 'topN'] },
+    'region.topAlliances': { label: 'Region: Top alliances (bar)', needs: ['region', 'topN'] },
   
     /* World villages (/api/villages/latest) */
     'world.villageDensity': { label: 'World: Village density heatmap (sample)', needs: ['limitVillages'] },
+    'world.populationByRegion': { label: 'World: Population by region (bar)', needs: ['topN'] },
+    'world.villagesByRegion': { label: 'World: Villages by region (bar)', needs: ['topN'] },
+    'world.allianceDistribution': { label: 'World: Alliance distribution (donut)', needs: ['limitVillages'] },
   
     /* Comparisons */
     'compare.playersRadar': { label: 'Compare 2 players (radar)', needs: ['player', 'playerB'] },
+    'compare.alliancesRadar': { label: 'Compare 2 alliances (radar)', needs: ['alliance', 'allianceB'] },
     'player.popVsTopRadial': { label: 'Player pop vs top player (radial)', needs: ['player'] },
+    'alliance.popVsTopRadial': { label: 'Alliance pop vs top alliance (radial)', needs: ['alliance'] },
   
     /* Timeline (no canonical backend timeline yet; keep a real-data-adjacent source for now) */
     'timeline.fromHistorySpacing': { label: 'Timeline: From player history day gaps (demo from history)', needs: ['player'] }
@@ -628,22 +775,22 @@
   
   /* Per-chart selectable sources (at least one backend-driven option each) */
   const sourcesByChartType = computed(() => ({
-    line: ['playerHistory.population', 'playerHistory.villages', 'players.topPop'],
-    bar: ['players.topPop', 'players.topVillages', 'alliances.topVillages'],
-    donut: ['players.allianceShareTopPlayers'],
-    area: ['playerHistory.population', 'playerHistory.villages'],
-    spark: ['playerHistory.population', 'players.topPop'],
-    scatter: ['players.popVsVillages'],
-    bubble: ['players.popVsVillages'],
+    line: ['playerHistory.population', 'playerHistory.villages', 'playerHistory.growthRate', 'players.topPop', 'alliances.topPopulation'],
+    bar: ['players.topPop', 'players.topVillages', 'players.growthRate', 'alliances.topVillages', 'alliances.topPopulation', 'alliances.playerCount', 'alliance.topPlayers', 'region.topPlayers', 'region.topAlliances', 'world.populationByRegion', 'world.villagesByRegion'],
+    donut: ['players.allianceShareTopPlayers', 'players.byAllianceCount', 'world.allianceDistribution'],
+    area: ['playerHistory.population', 'playerHistory.villages', 'playerHistory.growthRate'],
+    spark: ['playerHistory.population', 'playerHistory.villages', 'players.topPop'],
+    scatter: ['players.popVsVillages', 'alliances.popVsVillages'],
+    bubble: ['players.popVsVillages', 'alliances.popVsVillages'],
     heatmap: ['world.villageDensity'],
     candlestick: ['playerHistory.popOHLC'],
-    radar: ['compare.playersRadar'],
-    radialbar: ['player.popVsTopRadial'],
-    treemap: ['players.topPop'],
-    boxplot: ['players.popDistribution'],
+    radar: ['compare.playersRadar', 'compare.alliancesRadar'],
+    radialbar: ['player.popVsTopRadial', 'alliance.popVsTopRadial'],
+    treemap: ['players.topPop', 'players.byAlliancePop'],
+    boxplot: ['players.popDistribution', 'players.villageDistribution', 'alliances.distribution', 'alliance.villageDistribution'],
     rangearea: ['playerHistory.envelope'],
-    stackedbar: ['alliance.villagesQuadrants', 'region.villagesQuadrants'],
-    mixed: ['playerHistory.population'],
+    stackedbar: ['alliance.villagesQuadrants', 'alliance.populationByRegion', 'region.villagesQuadrants', 'region.populationByAlliance'],
+    mixed: ['playerHistory.population', 'playerHistory.popAndVillages'],
     timeline: ['timeline.fromHistorySpacing']
   }))
   
@@ -651,6 +798,181 @@
     const list = sourcesByChartType.value[type] || []
     return list[0] || ''
   }
+  
+  /* -----------------------------
+   * Title generation for widgets
+   * ----------------------------- */
+  function getTitleForSource (sourceKey, params = {}) {
+    if (!sourceKey) return 'Chart'
+    
+    const source = SOURCE_REGISTRY[sourceKey]
+    if (!source) return 'Chart'
+    
+    // Player history sources
+    if (sourceKey === 'playerHistory.population') {
+      const player = params.playerName || 'Player'
+      return `${player} - Population Growth`
+    }
+    if (sourceKey === 'playerHistory.villages') {
+      const player = params.playerName || 'Player'
+      return `${player} - Village Growth`
+    }
+    if (sourceKey === 'playerHistory.popOHLC') {
+      const player = params.playerName || 'Player'
+      return `${player} - Population OHLC`
+    }
+    if (sourceKey === 'playerHistory.envelope') {
+      const player = params.playerName || 'Player'
+      return `${player} - Population Range`
+    }
+    if (sourceKey === 'playerHistory.growthRate') {
+      const player = params.playerName || 'Player'
+      return `${player} - Growth Rate`
+    }
+    if (sourceKey === 'playerHistory.popAndVillages') {
+      const player = params.playerName || 'Player'
+      return `${player} - Population & Villages`
+    }
+    
+    // Top players sources
+    if (sourceKey === 'players.topPop') {
+      const topN = params.topN || 10
+      return `Top ${topN} Players by Population`
+    }
+    if (sourceKey === 'players.topVillages') {
+      const topN = params.topN || 10
+      return `Top ${topN} Players by Villages`
+    }
+    if (sourceKey === 'players.allianceShareTopPlayers') {
+      const topN = params.topN || 15
+      return `Alliance Share (Top ${topN} Players)`
+    }
+    if (sourceKey === 'players.growthRate') {
+      const topN = params.topN || 10
+      return `Top ${topN} Players - Growth Rate`
+    }
+    if (sourceKey === 'players.byAlliancePop') {
+      const topN = params.topN || 10
+      return `Top ${topN} Players - Population by Alliance`
+    }
+    if (sourceKey === 'players.byAllianceCount') {
+      return 'Players by Alliance Count'
+    }
+    if (sourceKey === 'players.villageDistribution') {
+      return 'Player Village Distribution'
+    }
+    
+    // Alliances
+    if (sourceKey === 'alliances.topVillages') {
+      const topN = params.topN || 10
+      return `Top ${topN} Alliances by Villages`
+    }
+    if (sourceKey === 'alliances.topPopulation') {
+      const topN = params.topN || 10
+      return `Top ${topN} Alliances by Population`
+    }
+    if (sourceKey === 'alliances.playerCount') {
+      const topN = params.topN || 10
+      return `Top ${topN} Alliances by Player Count`
+    }
+    
+    // Alliance villages
+    if (sourceKey === 'alliance.topPlayers') {
+      const tag = params.allianceTag || 'Alliance'
+      const topN = params.topN || 10
+      return `${tag} - Top ${topN} Players`
+    }
+    if (sourceKey === 'alliance.populationByRegion') {
+      const tag = params.allianceTag || 'Alliance'
+      return `${tag} - Population by Region`
+    }
+    if (sourceKey === 'alliance.villageDistribution') {
+      const tag = params.allianceTag || 'Alliance'
+      return `${tag} - Village Distribution`
+    }
+    
+    // Region villages
+    if (sourceKey === 'region.topPlayers') {
+      const region = params.regionName || 'Region'
+      const topN = params.topN || 10
+      return `${region} - Top ${topN} Players`
+    }
+    if (sourceKey === 'region.topAlliances') {
+      const region = params.regionName || 'Region'
+      const topN = params.topN || 10
+      return `${region} - Top ${topN} Alliances`
+    }
+    if (sourceKey === 'region.populationByAlliance') {
+      const region = params.regionName || 'Region'
+      return `${region} - Population by Alliance`
+    }
+    
+    // World sources
+    if (sourceKey === 'world.populationByRegion') {
+      const topN = params.topN || 10
+      return `Top ${topN} Regions by Population`
+    }
+    if (sourceKey === 'world.villagesByRegion') {
+      const topN = params.topN || 10
+      return `Top ${topN} Regions by Villages`
+    }
+    if (sourceKey === 'world.allianceDistribution') {
+      return 'World Alliance Distribution'
+    }
+    
+    // Comparisons
+    if (sourceKey === 'compare.playersRadar') {
+      const a = params.playerName || 'Player A'
+      const b = params.playerNameB || 'Player B'
+      return `${a} vs ${b}`
+    }
+    if (sourceKey === 'player.popVsTopRadial') {
+      const player = params.playerName || 'Player'
+      return `${player} vs Top Player`
+    }
+    if (sourceKey === 'compare.alliancesRadar') {
+      const a = params.allianceTag || 'Alliance A'
+      const b = params.allianceTagB || 'Alliance B'
+      return `${a} vs ${b}`
+    }
+    if (sourceKey === 'alliance.popVsTopRadial') {
+      const tag = params.allianceTag || 'Alliance'
+      return `${tag} vs Top Alliance`
+    }
+    
+    // Alliance/Region quadrants
+    if (sourceKey === 'alliance.villagesQuadrants') {
+      const tag = params.allianceTag || 'Alliance'
+      return `${tag} - Village Quadrants`
+    }
+    if (sourceKey === 'region.villagesQuadrants') {
+      const region = params.regionName || 'Region'
+      return `${region} - Village Quadrants`
+    }
+    
+    // Other sources
+    if (sourceKey === 'players.popVsVillages') {
+      return 'Population vs Villages'
+    }
+    if (sourceKey === 'players.popDistribution') {
+      return 'Population Distribution'
+    }
+    if (sourceKey === 'world.villageDensity') {
+      return 'World Village Density'
+    }
+    if (sourceKey === 'timeline.fromHistorySpacing') {
+      const player = params.playerName || 'Player'
+      return `${player} - Timeline`
+    }
+    
+    // Fallback to source label
+    return source.label || 'Chart'
+  }
+  
+  /* -----------------------------
+   * Top player storage for auto-selection
+   * ----------------------------- */
+  const topPlayerName = ref('')
   
   function ensureWidgetConfig (w) {
     if (!w) return
@@ -666,6 +988,16 @@
     // defaults for params
     if (typeof w.config.params.topN !== 'number') w.config.params.topN = 10
     if (typeof w.config.params.villageLimit !== 'number') w.config.params.villageLimit = 5000
+    
+    // Auto-select top player if source needs player param and it's not set
+    if (sourceNeeds(w.config.sourceKey, 'player') && !w.config.params.playerName && topPlayerName.value) {
+      w.config.params.playerName = topPlayerName.value
+    }
+    
+    // Auto-generate title if not set or is generic
+    if (!w.title || w.title.startsWith('Chart ') || w.title === 'Scatter') {
+      w.title = getTitleForSource(w.config.sourceKey, w.config.params)
+    }
   }
   
   /* -----------------------------
@@ -697,27 +1029,34 @@
   }
   
   async function loadOptionsOnce () {
-    // players
+    // players (filter out NPC - Natars)
     optionsLoading.value.players = true
     try {
       const { data } = await api.get('/api/players?limit=10000')
-      const rows = (Array.isArray(data) ? data : []).map(normalizePlayerRow).filter(x => x.name)
-      playerOptionsAll.value = rows
-        .sort((a, b) => b.population - a.population)
+      const rows = filterNpcPlayers((Array.isArray(data) ? data : []).map(normalizePlayerRow).filter(x => x.name))
+      const sorted = [...rows].sort((a, b) => b.population - a.population)
+      
+      // Store top player name for auto-selection
+      if (sorted.length > 0) {
+        topPlayerName.value = sorted[0].name
+      }
+      
+      playerOptionsAll.value = sorted
         .map(p => ({ label: `${p.name} (${p.population.toLocaleString()} pop)`, value: p.name }))
       playerOptionsFiltered.value = playerOptionsAll.value
     } catch {
       playerOptionsAll.value = []
       playerOptionsFiltered.value = []
+      topPlayerName.value = ''
     } finally {
       optionsLoading.value.players = false
     }
   
-    // alliances
+    // alliances (filter out NPC - Natars)
     optionsLoading.value.alliances = true
     try {
       const { data } = await api.get('/api/alliances')
-      const rows = (Array.isArray(data) ? data : []).map(normalizeAllianceRow).filter(x => x.tag)
+      const rows = filterNpcAlliances((Array.isArray(data) ? data : []).map(normalizeAllianceRow).filter(x => x.tag))
       allianceOptionsAll.value = rows
         .sort((a, b) => b.villages - a.villages)
         .map(a => ({ label: `${a.tag} (${a.villages.toLocaleString()} villages)`, value: a.tag }))
@@ -783,14 +1122,14 @@
   async function fetchPlayers () {
     return cached('players:10000', async () => {
       const { data } = await api.get('/api/players?limit=10000')
-      return (Array.isArray(data) ? data : []).map(normalizePlayerRow).filter(p => p.name)
+      return filterNpcPlayers((Array.isArray(data) ? data : []).map(normalizePlayerRow).filter(p => p.name))
     })
   }
   
   async function fetchAlliances () {
     return cached('alliances', async () => {
       const { data } = await api.get('/api/alliances')
-      return (Array.isArray(data) ? data : []).map(normalizeAllianceRow).filter(a => a.tag)
+      return filterNpcAlliances((Array.isArray(data) ? data : []).map(normalizeAllianceRow).filter(a => a.tag))
     })
   }
   
@@ -931,7 +1270,7 @@
       const players = await fetchPlayers()
       const pops = players.map(p => Number(p.population || 0)).filter(n => Number.isFinite(n)).sort((a, b) => a - b)
       if (!pops.length) return { series: [{ name: 'Distribution', data: [] }], color, colors }
-  
+
       // build boxplot buckets by quantiles (Q1..Q4)
       const bucketCount = 6
       const buckets = []
@@ -946,22 +1285,150 @@
         const q3 = slice[Math.floor(slice.length * 0.75)]
         buckets.push({ x: `B${i + 1}`, y: [min, q1, med, q3, max] })
       }
-  
+
       return { series: [{ name: 'Population', data: buckets }], color, colors }
+    }
+
+    if (sourceKey === 'players.villageDistribution') {
+      const players = await fetchPlayers()
+      const vills = players.map(p => Number(p.villages || 0)).filter(n => Number.isFinite(n)).sort((a, b) => a - b)
+      if (!vills.length) return { series: [{ name: 'Distribution', data: [] }], color, colors }
+
+      const bucketCount = 6
+      const buckets = []
+      for (let i = 0; i < bucketCount; i++) {
+        const start = Math.floor((i / bucketCount) * vills.length)
+        const end = Math.floor(((i + 1) / bucketCount) * vills.length)
+        const slice = vills.slice(start, Math.max(start + 1, end))
+        const min = slice[0]
+        const max = slice[slice.length - 1]
+        const q1 = slice[Math.floor(slice.length * 0.25)]
+        const med = slice[Math.floor(slice.length * 0.5)]
+        const q3 = slice[Math.floor(slice.length * 0.75)]
+        buckets.push({ x: `B${i + 1}`, y: [min, q1, med, q3, max] })
+      }
+      return { series: [{ name: 'Villages', data: buckets }], color, colors }
+    }
+
+    if (sourceKey === 'players.byAlliancePop') {
+      const players = await fetchPlayers()
+      const top = [...players].sort((a, b) => b.population - a.population).slice(0, topN)
+      
+      // Group by alliance and sum population
+      const allianceMap = new Map()
+      for (const p of top) {
+        const tag = (p.alliance && p.alliance.trim()) || 'No alliance'
+        allianceMap.set(tag, (allianceMap.get(tag) || 0) + p.population)
+      }
+      
+      const pairs = [...allianceMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20)
+      return {
+        series: [{ data: pairs.map(([tag, pop]) => ({ x: tag, y: pop })) }],
+        color,
+        colors
+      }
+    }
+
+    if (sourceKey === 'players.byAllianceCount') {
+      const players = await fetchPlayers()
+      const allianceMap = new Map()
+      for (const p of players) {
+        const tag = (p.alliance && p.alliance.trim()) || 'No alliance'
+        allianceMap.set(tag, (allianceMap.get(tag) || 0) + 1)
+      }
+      
+      const pairs = [...allianceMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)
+      return {
+        series: pairs.map(([, c]) => c),
+        labels: pairs.map(([t]) => t),
+        color,
+        colors
+      }
+    }
+
+    if (sourceKey === 'players.growthRate') {
+      const players = await fetchPlayers()
+      const top = [...players].sort((a, b) => b.population - a.population).slice(0, topN)
+      
+      // Calculate growth rate from history (simplified: compare recent vs older)
+      const growthRates = await Promise.all(top.map(async (p) => {
+        try {
+          const hist = await fetchPlayerHistory(p.name)
+          if (hist.length < 2) return { name: p.name, rate: 0 }
+          const recent = hist.slice(-7) // last 7 days
+          const older = hist.slice(0, Math.min(7, hist.length - 7))
+          if (!older.length) return { name: p.name, rate: 0 }
+          const recentAvg = recent.reduce((s, h) => s + Number(h.population || 0), 0) / recent.length
+          const olderAvg = older.reduce((s, h) => s + Number(h.population || 0), 0) / older.length
+          const rate = olderAvg > 0 ? ((recentAvg - olderAvg) / olderAvg) * 100 : 0
+          return { name: p.name, rate: Math.round(rate * 10) / 10 }
+        } catch {
+          return { name: p.name, rate: 0 }
+        }
+      }))
+      
+      const sorted = growthRates.sort((a, b) => b.rate - a.rate)
+      return {
+        categories: sorted.map(r => r.name),
+        series: [{ name: 'Growth Rate %', data: sorted.map(r => r.rate) }],
+        color,
+        colors,
+        horizontal: true
+      }
     }
   
     if (sourceKey === 'players.allianceShareTopPlayers') {
       const players = await fetchPlayers()
       const top = [...players].sort((a, b) => b.population - a.population).slice(0, topN)
+      
+      // Enrich with alliance data from villages if alliance is missing
+      const playerAllianceMap = new Map()
+      for (const p of top) {
+        if (p.alliance && p.alliance.trim()) {
+          playerAllianceMap.set(p.name, p.alliance.trim())
+        }
+      }
+      
+      // If we're missing alliance data, try to get it from villages (skip Natars)
+      if (playerAllianceMap.size < top.length * 0.5) {
+        try {
+          const villages = await fetchWorldVillages(5000)
+          for (const v of villages) {
+            const playerName = String(v?.player_name ?? v?.player ?? '').trim()
+            if (playerName && !playerAllianceMap.has(playerName)) {
+              const alliance = String(v?.alliance ?? v?.alliance_tag ?? '').trim()
+              if (alliance && !isNpcAlliance(alliance)) {
+                playerAllianceMap.set(playerName, alliance)
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to enrich alliance data:', e)
+        }
+      }
+      
       const map = new Map()
       for (const p of top) {
-        const tag = (p.alliance || 'No alliance').trim() || 'No alliance'
+        let tag = playerAllianceMap.get(p.name) || (p.alliance && p.alliance.trim()) || 'No alliance'
+        if (isNpcAlliance(tag)) tag = 'No alliance'
         map.set(tag, (map.get(tag) || 0) + 1)
       }
-      const pairs = [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12)
+      
+      // Filter out "No alliance" if there are other alliances, or keep it if it's significant
+      const pairs = [...map.entries()].sort((a, b) => b[1] - a[1])
+      const filtered = pairs.filter(([tag]) => {
+        if (tag === 'No alliance') {
+          // Only show "No alliance" if it's in top 3 or represents significant portion
+          const noAllianceCount = map.get('No alliance') || 0
+          const total = top.length
+          return noAllianceCount >= 3 || (noAllianceCount / total) > 0.2
+        }
+        return true
+      }).slice(0, 12)
+      
       return {
-        series: pairs.map(([, c]) => c),
-        labels: pairs.map(([t]) => t),
+        series: filtered.map(([, c]) => c),
+        labels: filtered.map(([t]) => t),
         color,
         colors
       }
@@ -972,6 +1439,61 @@
       const alliances = await fetchAlliances()
       const top = [...alliances].sort((a, b) => b.villages - a.villages).slice(0, topN)
       return { categories: top.map(a => a.tag), series: [{ name: 'Villages', data: top.map(a => a.villages) }], color, colors, horizontal: true }
+    }
+
+    if (sourceKey === 'alliances.topPopulation') {
+      const alliances = await fetchAlliances()
+      const top = [...alliances].sort((a, b) => b.population - a.population).slice(0, topN)
+      return { categories: top.map(a => a.tag), series: [{ name: 'Population', data: top.map(a => a.population) }], color, colors, horizontal: true }
+    }
+
+    if (sourceKey === 'alliances.playerCount') {
+      const alliances = await fetchAlliances()
+      // Estimate player count from villages data
+      const enriched = await Promise.all(alliances.slice(0, topN).map(async (a) => {
+        try {
+          const villages = await fetchAllianceVillages(a.tag, 1000)
+          const playerSet = new Set(villages.map(v => String(v?.player_name ?? v?.player ?? '').trim()).filter(Boolean))
+          return { tag: a.tag, count: playerSet.size }
+        } catch {
+          return { tag: a.tag, count: 0 }
+        }
+      }))
+      const sorted = enriched.sort((a, b) => b.count - a.count)
+      return { categories: sorted.map(a => a.tag), series: [{ name: 'Players', data: sorted.map(a => a.count) }], color, colors, horizontal: true }
+    }
+
+    if (sourceKey === 'alliances.popVsVillages') {
+      const alliances = await fetchAlliances()
+      const pts = alliances.filter(a => Number.isFinite(a.population) && Number.isFinite(a.villages)).slice(0, 500)
+      return {
+        series: [{ name: 'Alliances', data: pts.map(a => [a.villages, a.population]) }],
+        xTitle: 'Villages',
+        yTitle: 'Population',
+        color,
+        colors
+      }
+    }
+
+    if (sourceKey === 'alliances.distribution') {
+      const alliances = await fetchAlliances()
+      const pops = alliances.map(a => Number(a.population || 0)).filter(n => Number.isFinite(n)).sort((a, b) => a - b)
+      if (!pops.length) return { series: [{ name: 'Distribution', data: [] }], color, colors }
+
+      const bucketCount = 6
+      const buckets = []
+      for (let i = 0; i < bucketCount; i++) {
+        const start = Math.floor((i / bucketCount) * pops.length)
+        const end = Math.floor(((i + 1) / bucketCount) * pops.length)
+        const slice = pops.slice(start, Math.max(start + 1, end))
+        const min = slice[0]
+        const max = slice[slice.length - 1]
+        const q1 = slice[Math.floor(slice.length * 0.25)]
+        const med = slice[Math.floor(slice.length * 0.5)]
+        const q3 = slice[Math.floor(slice.length * 0.75)]
+        buckets.push({ x: `B${i + 1}`, y: [min, q1, med, q3, max] })
+      }
+      return { series: [{ name: 'Population', data: buckets }], color, colors }
     }
   
     // -------- Player history --------
@@ -1047,33 +1569,177 @@
       return { series: [{ name: 'Min/Max', data: series }], color, colors }
     }
   
-    // -------- Quadrant breakdowns from villages list --------
+    // -------- Alliance villages --------
     if (sourceKey === 'alliance.villagesQuadrants') {
       const tag = String(params.allianceTag || '').trim()
       if (!tag) throw new Error('Select an alliance for this source.')
       const rows = await fetchAllianceVillages(tag, villageLimit)
-  
+
       const counts = { NW: 0, NE: 0, SW: 0, SE: 0 }
       for (const r of rows) {
         const { x, y } = xyFromVillageRow(r)
         counts[quadrantOf(x, y)]++
       }
-  
+
       // stacked: single series is acceptable; also works as a simple bar if your component expects stacked
       return { categories: ['NW', 'NE', 'SW', 'SE'], series: [{ name: tag, data: [counts.NW, counts.NE, counts.SW, counts.SE] }], color, colors }
     }
-  
+
+    if (sourceKey === 'alliance.populationByRegion') {
+      const tag = String(params.allianceTag || '').trim()
+      if (!tag) throw new Error('Select an alliance for this source.')
+      const rows = await fetchAllianceVillages(tag, villageLimit)
+
+      const regionMap = new Map()
+      for (const r of rows) {
+        const region = String(r?.region ?? '').trim() || 'Unknown'
+        const pop = Number(r?.population || 0)
+        regionMap.set(region, (regionMap.get(region) || 0) + pop)
+      }
+
+      const pairs = [...regionMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+      return {
+        categories: pairs.map(([r]) => r),
+        series: [{ name: tag, data: pairs.map(([, pop]) => pop) }],
+        color,
+        colors
+      }
+    }
+
+    if (sourceKey === 'alliance.topPlayers') {
+      const tag = String(params.allianceTag || '').trim()
+      if (!tag) throw new Error('Select an alliance for this source.')
+      const rows = await fetchAllianceVillages(tag, villageLimit)
+
+      const playerMap = new Map()
+      for (const r of rows) {
+        const player = String(r?.player_name ?? r?.player ?? '').trim()
+        if (!player) continue
+        const pop = Number(r?.population || 0)
+        playerMap.set(player, (playerMap.get(player) || 0) + pop)
+      }
+
+      const pairs = [...playerMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN)
+      return {
+        categories: pairs.map(([p]) => p),
+        series: [{ name: 'Population', data: pairs.map(([, pop]) => pop) }],
+        color,
+        colors,
+        horizontal: true
+      }
+    }
+
+    if (sourceKey === 'alliance.villageDistribution') {
+      const tag = String(params.allianceTag || '').trim()
+      if (!tag) throw new Error('Select an alliance for this source.')
+      const rows = await fetchAllianceVillages(tag, villageLimit)
+
+      // Count villages per player
+      const playerVillageCounts = new Map()
+      for (const r of rows) {
+        const player = String(r?.player_name ?? r?.player ?? '').trim()
+        if (player) {
+          playerVillageCounts.set(player, (playerVillageCounts.get(player) || 0) + 1)
+        }
+      }
+
+      const counts = [...playerVillageCounts.values()].sort((a, b) => a - b)
+      if (!counts.length) return { series: [{ name: 'Distribution', data: [] }], color, colors }
+
+      const bucketCount = 6
+      const buckets = []
+      for (let i = 0; i < bucketCount; i++) {
+        const start = Math.floor((i / bucketCount) * counts.length)
+        const end = Math.floor(((i + 1) / bucketCount) * counts.length)
+        const slice = counts.slice(start, Math.max(start + 1, end))
+        const min = slice[0]
+        const max = slice[slice.length - 1]
+        const q1 = slice[Math.floor(slice.length * 0.25)]
+        const med = slice[Math.floor(slice.length * 0.5)]
+        const q3 = slice[Math.floor(slice.length * 0.75)]
+        buckets.push({ x: `B${i + 1}`, y: [min, q1, med, q3, max] })
+      }
+      return { series: [{ name: 'Villages per Player', data: buckets }], color, colors }
+    }
+
+    // -------- Region villages --------
     if (sourceKey === 'region.villagesQuadrants') {
       const rn = String(params.regionName || '').trim()
       if (!rn) throw new Error('Select a region for this source.')
       const rows = await fetchRegionVillages(rn, villageLimit)
-  
+
       const counts = { NW: 0, NE: 0, SW: 0, SE: 0 }
       for (const r of rows) {
         const { x, y } = xyFromVillageRow(r)
         counts[quadrantOf(x, y)]++
       }
       return { categories: ['NW', 'NE', 'SW', 'SE'], series: [{ name: rn, data: [counts.NW, counts.NE, counts.SW, counts.SE] }], color, colors }
+    }
+
+    if (sourceKey === 'region.populationByAlliance') {
+      const rn = String(params.regionName || '').trim()
+      if (!rn) throw new Error('Select a region for this source.')
+      const rows = await fetchRegionVillages(rn, villageLimit)
+
+      const allianceMap = new Map()
+      for (const r of rows) {
+        const alliance = String(r?.alliance ?? r?.alliance_tag ?? '').trim() || 'No alliance'
+        const pop = Number(r?.population || 0)
+        allianceMap.set(alliance, (allianceMap.get(alliance) || 0) + pop)
+      }
+
+      const pairs = [...allianceMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+      return {
+        categories: pairs.map(([a]) => a),
+        series: [{ name: rn, data: pairs.map(([, pop]) => pop) }],
+        color,
+        colors
+      }
+    }
+
+    if (sourceKey === 'region.topPlayers') {
+      const rn = String(params.regionName || '').trim()
+      if (!rn) throw new Error('Select a region for this source.')
+      const rows = await fetchRegionVillages(rn, villageLimit)
+
+      const playerMap = new Map()
+      for (const r of rows) {
+        const player = String(r?.player_name ?? r?.player ?? '').trim()
+        if (!player) continue
+        const pop = Number(r?.population || 0)
+        playerMap.set(player, (playerMap.get(player) || 0) + pop)
+      }
+
+      const pairs = [...playerMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN)
+      return {
+        categories: pairs.map(([p]) => p),
+        series: [{ name: 'Population', data: pairs.map(([, pop]) => pop) }],
+        color,
+        colors,
+        horizontal: true
+      }
+    }
+
+    if (sourceKey === 'region.topAlliances') {
+      const rn = String(params.regionName || '').trim()
+      if (!rn) throw new Error('Select a region for this source.')
+      const rows = await fetchRegionVillages(rn, villageLimit)
+
+      const allianceMap = new Map()
+      for (const r of rows) {
+        const alliance = String(r?.alliance ?? r?.alliance_tag ?? '').trim() || 'No alliance'
+        const pop = Number(r?.population || 0)
+        allianceMap.set(alliance, (allianceMap.get(alliance) || 0) + pop)
+      }
+
+      const pairs = [...allianceMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN)
+      return {
+        categories: pairs.map(([a]) => a),
+        series: [{ name: 'Population', data: pairs.map(([, pop]) => pop) }],
+        color,
+        colors,
+        horizontal: true
+      }
     }
   
     // -------- World density heatmap (sample) --------
@@ -1117,6 +1783,60 @@
   
       return { series, color, colors }
     }
+
+    if (sourceKey === 'world.populationByRegion') {
+      const rows = await fetchWorldVillages(villageLimit)
+      const regionMap = new Map()
+      for (const r of rows) {
+        const region = String(r?.region ?? '').trim() || 'Unknown'
+        const pop = Number(r?.population || 0)
+        regionMap.set(region, (regionMap.get(region) || 0) + pop)
+      }
+
+      const pairs = [...regionMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN)
+      return {
+        categories: pairs.map(([r]) => r),
+        series: [{ name: 'Population', data: pairs.map(([, pop]) => pop) }],
+        color,
+        colors,
+        horizontal: true
+      }
+    }
+
+    if (sourceKey === 'world.villagesByRegion') {
+      const rows = await fetchWorldVillages(villageLimit)
+      const regionMap = new Map()
+      for (const r of rows) {
+        const region = String(r?.region ?? '').trim() || 'Unknown'
+        regionMap.set(region, (regionMap.get(region) || 0) + 1)
+      }
+
+      const pairs = [...regionMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN)
+      return {
+        categories: pairs.map(([r]) => r),
+        series: [{ name: 'Villages', data: pairs.map(([, count]) => count) }],
+        color,
+        colors,
+        horizontal: true
+      }
+    }
+
+    if (sourceKey === 'world.allianceDistribution') {
+      const rows = await fetchWorldVillages(villageLimit)
+      const allianceMap = new Map()
+      for (const r of rows) {
+        const alliance = String(r?.alliance ?? r?.alliance_tag ?? '').trim() || 'No alliance'
+        allianceMap.set(alliance, (allianceMap.get(alliance) || 0) + 1)
+      }
+
+      const pairs = [...allianceMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)
+      return {
+        series: pairs.map(([, c]) => c),
+        labels: pairs.map(([t]) => t),
+        color,
+        colors
+      }
+    }
   
     // -------- Comparisons --------
     if (sourceKey === 'compare.playersRadar') {
@@ -1147,9 +1867,51 @@
       const top = [...players].sort((a, b) => b.population - a.population)[0]
       const me = players.find(p => p.name === name)
       if (!me || !top) throw new Error('Player/top not found.')
-  
+
       const pct = top.population > 0 ? Math.round((me.population / top.population) * 100) : 0
       return { series: [Math.max(0, Math.min(100, pct))], labels: ['% of top pop'], color, colors }
+    }
+
+    if (sourceKey === 'compare.alliancesRadar') {
+      const a = String(params.allianceTag || '').trim()
+      const b = String(params.allianceTagB || '').trim()
+      if (!a || !b) throw new Error('Select Alliance and Alliance B for this source.')
+      
+      const [villagesA, villagesB] = await Promise.all([
+        fetchAllianceVillages(a, 1000),
+        fetchAllianceVillages(b, 1000)
+      ])
+
+      const popA = villagesA.reduce((s, v) => s + Number(v?.population || 0), 0)
+      const popB = villagesB.reduce((s, v) => s + Number(v?.population || 0), 0)
+      const countA = villagesA.length
+      const countB = villagesB.length
+
+      const playerSetA = new Set(villagesA.map(v => String(v?.player_name ?? v?.player ?? '').trim()).filter(Boolean))
+      const playerSetB = new Set(villagesB.map(v => String(v?.player_name ?? v?.player ?? '').trim()).filter(Boolean))
+
+      const categories = ['Population', 'Villages', 'Players']
+      return {
+        categories,
+        series: [
+          { name: a, data: [popA, countA, playerSetA.size] },
+          { name: b, data: [popB, countB, playerSetB.size] }
+        ],
+        color,
+        colors
+      }
+    }
+
+    if (sourceKey === 'alliance.popVsTopRadial') {
+      const tag = String(params.allianceTag || '').trim()
+      if (!tag) throw new Error('Select an alliance for this source.')
+      const alliances = await fetchAlliances()
+      const top = [...alliances].sort((a, b) => b.population - a.population)[0]
+      const me = alliances.find(a => a.tag === tag)
+      if (!me || !top) throw new Error('Alliance/top not found.')
+
+      const pct = top.population > 0 ? Math.round((me.population / top.population) * 100) : 0
+      return { series: [Math.max(0, Math.min(100, pct))], labels: ['% of top alliance pop'], color, colors }
     }
   
     // -------- Timeline (derived from history spacing) --------
@@ -1204,7 +1966,7 @@
   const customizeDraft = ref({
     title: '',
     sourceKey: '',
-    params: { playerName: '', playerNameB: '', allianceTag: '', regionName: '', topN: 10, villageLimit: 5000 },
+    params: { playerName: '', playerNameB: '', allianceTag: '', allianceTagB: '', regionName: '', topN: 10, villageLimit: 5000 },
     colorMode: 'single',
     color: DEFAULT_COLOR,
     colors: [...DEFAULT_SERIES_COLORS]
@@ -1225,6 +1987,14 @@
     const needs = SOURCE_REGISTRY[k]?.needs || []
     if (!needs.includes('topN') && typeof customizeDraft.value.params.topN !== 'number') customizeDraft.value.params.topN = 10
     if (!needs.includes('limitVillages') && typeof customizeDraft.value.params.villageLimit !== 'number') customizeDraft.value.params.villageLimit = 5000
+    
+    // Auto-fill top player if source needs player and it's not set
+    if (needs.includes('player') && !customizeDraft.value.params.playerName && topPlayerName.value) {
+      customizeDraft.value.params.playerName = topPlayerName.value
+    }
+    
+    // Update title based on new source
+    customizeDraft.value.title = getTitleForSource(k, customizeDraft.value.params)
   }
   
   function openWidgetCustomizer (id) {
@@ -1243,6 +2013,7 @@
         playerName: w.config?.params?.playerName ?? '',
         playerNameB: w.config?.params?.playerNameB ?? '',
         allianceTag: w.config?.params?.allianceTag ?? '',
+        allianceTagB: w.config?.params?.allianceTagB ?? '',
         regionName: w.config?.params?.regionName ?? '',
         topN: Number.isFinite(w.config?.params?.topN) ? w.config.params.topN : 10,
         villageLimit: Number.isFinite(w.config?.params?.villageLimit) ? w.config.params.villageLimit : 5000
@@ -1277,12 +2048,17 @@
     if (!w) return closeCustomizer()
     if (isChartWidget(w)) ensureWidgetConfig(w)
   
-    w.title = customizeDraft.value.title
-  
     if (isChartWidget(w)) {
       w.config.sourceKey = customizeDraft.value.sourceKey || w.config.sourceKey
       w.config.source = w.config.sourceKey // keep old field updated for backward compatibility
       w.config.params = { ...(w.config.params || {}), ...(customizeDraft.value.params || {}) }
+      
+      // Use provided title, or auto-generate if empty/generic
+      if (customizeDraft.value.title && !customizeDraft.value.title.startsWith('Chart ') && customizeDraft.value.title !== 'Scatter') {
+        w.title = customizeDraft.value.title
+      } else {
+        w.title = getTitleForSource(w.config.sourceKey, w.config.params)
+      }
   
       w.config.colorMode = customizeDraft.value.colorMode === 'series' ? 'series' : 'single'
       if (w.config.colorMode === 'series') {
@@ -1293,6 +2069,8 @@
         w.config.color = (customizeDraft.value.color || '').trim() || DEFAULT_COLOR
         delete w.config.colors
       }
+    } else {
+      w.title = customizeDraft.value.title
     }
   
     saveLayout()
@@ -1323,22 +2101,120 @@
   
   /* defaults */
   const defaultWidgets = [
-    { id: 'line', type: 'line', title: 'Chart 1', x: 0, y: 0, w: 60, h: 8, minW: 40, minH: 6 },
-    { id: 'bar', type: 'bar', title: 'Chart 2', x: 60, y: 0, w: 60, h: 8, minW: 40, minH: 6 },
-    { id: 'donut', type: 'donut', title: 'Chart 3', x: 0, y: 8, w: 40, h: 7, minW: 28, minH: 5 },
-    { id: 'area', type: 'area', title: 'Chart 4', x: 40, y: 8, w: 40, h: 7, minW: 28, minH: 5 },
-    { id: 'scatter', type: 'scatter', title: 'Scatter', x: 80, y: 8, w: 40, h: 7, minW: 28, minH: 5 }
+    { 
+      id: 'line', 
+      type: 'line', 
+      title: 'Top Player Population Growth', 
+      x: 0, 
+      y: 0, 
+      w: 60, 
+      h: 8, 
+      minW: 40, 
+      minH: 6,
+      config: {
+        sourceKey: 'playerHistory.population',
+        params: { playerName: '' }, // Will be auto-filled with top player
+        color: DEFAULT_COLOR,
+        colorMode: 'single'
+      }
+    },
+    { 
+      id: 'bar', 
+      type: 'bar', 
+      title: 'Top 10 Players by Population', 
+      x: 60, 
+      y: 0, 
+      w: 60, 
+      h: 8, 
+      minW: 40, 
+      minH: 6,
+      config: {
+        sourceKey: 'players.topPop',
+        params: { topN: 10 },
+        color: DEFAULT_COLOR,
+        colorMode: 'single'
+      }
+    },
+    { 
+      id: 'donut', 
+      type: 'donut', 
+      title: 'Alliance Share (Top 15 Players)', 
+      x: 0, 
+      y: 8, 
+      w: 40, 
+      h: 7, 
+      minW: 28, 
+      minH: 5,
+      config: {
+        sourceKey: 'players.allianceShareTopPlayers',
+        params: { topN: 15 },
+        color: DEFAULT_COLOR,
+        colorMode: 'series'
+      }
+    },
+    { 
+      id: 'area', 
+      type: 'area', 
+      title: 'Top Player Village Growth', 
+      x: 40, 
+      y: 8, 
+      w: 40, 
+      h: 7, 
+      minW: 28, 
+      minH: 5,
+      config: {
+        sourceKey: 'playerHistory.villages',
+        params: { playerName: '' }, // Will be auto-filled with top player
+        color: DEFAULT_COLOR,
+        colorMode: 'single'
+      }
+    },
+    { 
+      id: 'scatter', 
+      type: 'scatter', 
+      title: 'Population vs Villages', 
+      x: 80, 
+      y: 8, 
+      w: 40, 
+      h: 7, 
+      minW: 28, 
+      minH: 5,
+      config: {
+        sourceKey: 'players.popVsVillages',
+        params: {},
+        color: DEFAULT_COLOR,
+        colorMode: 'single'
+      }
+    }
   ]
   
   function cloneDefaults () {
     return defaultWidgets.map(w => {
       const ww = { ...w }
-      if (isChartWidget(ww)) ensureWidgetConfig(ww)
+      if (isChartWidget(ww)) {
+        ensureWidgetConfig(ww)
+        // Update title after ensureWidgetConfig has set params
+        if (ww.config?.sourceKey) {
+          ww.title = getTitleForSource(ww.config.sourceKey, ww.config.params || {})
+        }
+      }
       return ww
     })
   }
   
   function loadWidgets () {
+    // Prefer loaded layout from store
+    if (layoutsStore.activeLayoutId) {
+      const loaded = layoutsStore.loadLayout(layoutsStore.activeLayoutId)
+      if (loaded && Array.isArray(loaded) && loaded.length) {
+        return loaded.map(w => {
+          const ww = { ...w }
+          if (isChartWidget(ww)) ensureWidgetConfig(ww)
+          return ww
+        })
+      }
+    }
+    // Fallback: legacy localStorage or defaults
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (!raw) return cloneDefaults()
@@ -1354,6 +2230,69 @@
     } catch {
       return cloneDefaults()
     }
+  }
+
+  async function onLoadLayout (id) {
+    layoutsStore.setActiveLayout(id)
+    if (!id) {
+      widgets.value = loadWidgets()
+      await nextTick()
+      detachResizeObserver()
+      if (grid.value) {
+        grid.value.destroy(false)
+        grid.value = null
+      }
+      await nextTick()
+      initGrid()
+      attachResizeObserver()
+      await settleAfterPaint()
+      refreshAllWidgets()
+      return
+    }
+    const loaded = layoutsStore.loadLayout(id)
+    if (!loaded || !Array.isArray(loaded) || !loaded.length) return
+    const mapped = loaded.map(w => {
+      const ww = { ...w }
+      if (isChartWidget(ww)) ensureWidgetConfig(ww)
+      return ww
+    })
+    widgets.value = mapped
+    selectedLayoutId.value = id
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
+    await nextTick()
+    detachResizeObserver()
+    if (grid.value) {
+      grid.value.destroy(false)
+      grid.value = null
+    }
+    await nextTick()
+    initGrid()
+    attachResizeObserver()
+    await settleAfterPaint()
+    refreshAllWidgets()
+    Notify.create({ type: 'info', message: `Loaded layout: ${layoutsStore.getLayout(id)?.name ?? id}` })
+  }
+
+  function doSaveAs () {
+    const name = saveAsName.value.trim()
+    if (!name) return
+    saveLayout()
+    const merged = grid.value
+      ? (() => {
+          const items = grid.value.save(false)
+          const byId = new Map(items.map(i => [i.id, i]))
+          return widgets.value.map(w => {
+            const i = byId.get(w.id)
+            if (!i) return { ...w }
+            return { ...w, x: i.x, y: i.y, w: i.w, h: i.h }
+          })
+        })()
+      : [...widgets.value]
+    layoutsStore.saveLayout(name, merged)
+    selectedLayoutId.value = layoutsStore.activeLayoutId
+    showSaveAsDialog.value = false
+    saveAsName.value = ''
+    Notify.create({ type: 'positive', message: `Saved layout: ${name}` })
   }
   
   const widgets = ref(loadWidgets())
@@ -1568,22 +2507,28 @@ grid.value.on('dragstop', () => {
   }
   
   function saveLayout () {
-    if (!grid.value) { localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets.value)); return }
-    const items = grid.value.save(false)
-    const byId = new Map(items.map(i => [i.id, i]))
-  
-    const merged = widgets.value.map(w => {
-      const i = byId.get(w.id)
-      if (!i) return { ...w }
-      return { ...w, x: i.x, y: i.y, w: i.w, h: i.h }
-    })
-  
-    widgets.value = merged
+    let merged = widgets.value
+    if (grid.value) {
+      const items = grid.value.save(false)
+      const byId = new Map(items.map(i => [i.id, i]))
+      merged = widgets.value.map(w => {
+        const i = byId.get(w.id)
+        if (!i) return { ...w }
+        return { ...w, x: i.x, y: i.y, w: i.w, h: i.h }
+      })
+      widgets.value = merged
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
+    if (layoutsStore.activeLayoutId) {
+      const layout = layoutsStore.getLayout(layoutsStore.activeLayoutId)
+      if (layout) layoutsStore.saveLayout(layout.name, merged)
+    }
   }
   
   async function resetLayout () {
     localStorage.removeItem(STORAGE_KEY)
+    layoutsStore.setActiveLayout(null)
+    selectedLayoutId.value = null
     widgets.value = cloneDefaults()
   
     await nextTick()
@@ -1669,6 +2614,22 @@ onBeforeUnmount(() => {
   
     // load select options and initial widget data
     await loadOptionsOnce()
+    
+    // Update widgets that need player/alliance/region params after options load
+    widgets.value.forEach(w => {
+      if (isChartWidget(w)) {
+        ensureWidgetConfig(w)
+        // Update title if it was auto-generated
+        if (w.config?.sourceKey) {
+          w.title = getTitleForSource(w.config.sourceKey, w.config.params || {})
+        }
+      }
+    })
+    
+    // Save updated widget configs
+    saveLayout()
+    
+    // Refresh all widgets with updated configs
     refreshAllWidgets()
   })
   

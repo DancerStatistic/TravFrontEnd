@@ -9,6 +9,7 @@ load_dotenv()
 
 @dataclass
 class Config:
+
     """Application configuration loaded from environment variables."""
     
     # Flask Configuration
@@ -51,13 +52,26 @@ class Config:
     
     def __post_init__(self):
         """Load users from environment variable after initialization."""
-        auth_users_env = os.getenv("AUTH_USERS", "")
+        # Default users (not recommended for production)
+        # These are used if AUTH_USERS env var is not set
+        default_users = {
+            "admin@example.com": {"password": "your-secure-password"},
+            # Add more users as needed
+        }
+        
+        # Override with environment variable if set
+        auth_users_env = os.getenv("AUTH_USERS", "").strip()
         if auth_users_env:
             # Parse format: user1@example.com:password1,user2@example.com:password2
+            self.AUTH_USERS = {}
             for user_entry in auth_users_env.split(","):
+                user_entry = user_entry.strip()
                 if ":" in user_entry:
                     email, password = user_entry.split(":", 1)
                     self.AUTH_USERS[email.strip()] = {"password": password.strip()}
+        else:
+            # Use defaults if no env var
+            self.AUTH_USERS = default_users.copy()
     
     def validate(self) -> None:
         """Validate required configuration values."""

@@ -15,12 +15,13 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Centralized 401 handling
+// Centralized 401 handling (skip for login/me endpoints - these are auth checks, not protected resources)
 api.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err?.response?.status === 401) {
-      // preserve redirect
+    const url = err?.config?.url || ''
+    const isAuthEndpoint = url.includes('/api/login') || url.includes('/api/me')
+    if (err?.response?.status === 401 && !isAuthEndpoint) {
       const target = encodeURIComponent(window.location.pathname + window.location.search)
       window.location.href = `/login?redirect=${target}`
     }

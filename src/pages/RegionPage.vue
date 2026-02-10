@@ -213,6 +213,10 @@
           <q-toolbar-title>Region Map Overview</q-toolbar-title>
         </q-toolbar>
         <div class="modal-svg-container">
+          <q-inner-loading :showing="!mapDialogLoaded" color="primary">
+            <q-spinner size="50px" />
+            <div class="text-body2 q-mt-md">Loading map...</div>
+          </q-inner-loading>
           <object
             ref="modalSvgObject"
             type="image/svg+xml"
@@ -291,6 +295,7 @@ const pagination = ref({
 })
 
 const mapDialog = ref(false)
+const mapDialogLoaded = ref(false)
 const miniSvgObject = ref(null)
 const modalSvgObject = ref(null)
 
@@ -349,23 +354,22 @@ async function fetchRegionStats(region) {
 
     const totalPop = vs.reduce((s, v) => s + (Number(v.population) || 0), 0)
 
-    // count alliances per region
+    // count alliances per region (filter out NPC - Natars)
     const counts = {}
     for (const v of vs) {
-      const a = (v.alliance ?? v.alliance_tag ?? 'Natars').toString().trim() || 'Natars'
+      const raw = (v.alliance ?? v.alliance_tag ?? '').toString().trim()
+      const a = !raw || raw.toLowerCase() === 'natars' ? 'No alliance' : raw
       counts[a] = (counts[a] || 0) + 1
     }
-    const sorted = Object.entries(counts).sort(([, a], [, b]) => b - a)
+    const sorted = Object.entries(counts)
+      .filter(([tag]) => tag !== 'No alliance')
+      .sort(([, a], [, b]) => b - a)
 
     let displayAlliance = ''
     let npcDominated = false
     if (sorted.length) {
-      if (sorted[0][0] === 'Natars' && sorted.length > 1) {
-        npcDominated = true
-        displayAlliance = sorted[1][0]
-      } else {
-        displayAlliance = sorted[0][0]
-      }
+      displayAlliance = sorted[0][0]
+      npcDominated = (counts['No alliance'] || 0) > (counts[sorted[0][0]] || 0)
     }
 
     const stats = {
@@ -497,10 +501,13 @@ function clearTodayCache() {
  * SVG Map Dialog hooks (existing behavior)
  * ----------------------------- */
 function openMapDialog() {
+  mapDialogLoaded.value = false
   mapDialog.value = true
 }
 function onMiniMapLoad() {}
-function onModalMapLoad() {}
+function onModalMapLoad() {
+  mapDialogLoaded.value = true
+}
 
 onMounted(loadRegions)
 </script>
@@ -549,12 +556,24 @@ onMounted(loadRegions)
 }
 
 .stat-card {
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.3s ease-in;
   height: 100%;
+  animation: fadeInUp 0.4s ease-out;
 
   &:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -570,9 +589,11 @@ onMounted(loadRegions)
 .modern-table {
   .q-table tbody tr {
     cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
 
     &:hover {
       background-color: $grey-2;
+      transform: translateX(2px);
     }
   }
 }
